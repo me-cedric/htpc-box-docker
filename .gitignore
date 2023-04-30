@@ -1,0 +1,5 @@
+.env
+nginx.conf
+certs/*
+letsencrypt/*
+portainer-data/*

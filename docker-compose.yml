@@ -1,176 +1,516 @@
-version: "3.4"
+version: "3.9"
+
+networks:
+  default:
+    driver: bridge
+  npm_proxy:
+    name: npm_proxy
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.89.0/24
+
+x-common-keys-media: &common-keys-media
+  networks:
+    - npm_proxy
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
 services:
-  vpn:
-    container_name: vpn
-    image: bubuntux/nordvpn:latest
-    cap_add:
-      - net_admin # required to modify network interfaces
-    restart: unless-stopped
-    devices:
-      - /dev/net/tun
-    environment:
-      - USER=${VPN_USER} # vpn user, defined in .env
-      - PASS=${VPN_PASSWORD} # vpn password, defined in .env
-      - COUNTRY=${VPN_COUNTRY} # vpn country, defined in .env
-      - NETWORK=${NETWORK} # local network mask, defined in .env
-      - PROTOCOL=UDP
-      - CATEGORY=P2P
-      - OPENVPN_OPTS=--pull-filter ignore "ping-restart" --ping-exit 180
-      - TZ=${TZ} # timezone, defined in .env
+  traefik:
+    container_name: traefik
+    image: traefik:latest
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.100
+    command:
+      - --api
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - "--certificatesresolvers.letsencrypt.acme.email=${EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
     ports:
-      - 9091:9091 # Transmission web UI
-      - 51413:51413 # Transmission bittorrent daemon
-      - 51413:51413/udp # Transmission bittorrent daemon
-      - 8112:8112 # port for deluge web UI to be reachable from local network
-
-  organizr:
-    container_name: organizr
-    image: organizr/organizr:latest
-    network_mode: host
-    environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
-    volumes:
-      - ${CONFIG}/config/organizr:/config
-    restart: unless-stopped
-
-  ouroboros:
-    container_name: ouroboros
-    hostname: ouroboros
-    image: pyouroboros/ouroboros
-    environment:
-      - CLEANUP=true
-      - INTERVAL=300
-      - LOG_LEVEL=info
-      - SELF_UPDATE=true
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - 80:80
+      - 443:443
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${CONFIG}/config/organizr:/config
+      - "./letsencrypt:/letsencrypt"
+    environment:
+      - TZ=$TZ
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.${SERVERNAME}`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      # middleware redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+  #truenas
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.101
+    environment:
+      - PUID=${PUID} # default user id, defined in .env
+      - PGID=${PGID} # default group id, defined in .env
+      - TZ=${TZ} # timezone, defined in .env
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.nginx.rule=Host(`truenas.${SERVERNAME}`)"
+      - "traefik.http.routers.nginx.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.nginx.entrypoints=websecure"
+      - "traefik.http.routers.nginx.tls=true"
+      - "traefik.http.routers.nginx.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.nginx.service=nginx"
+      - "traefik.http.services.nginx.loadbalancer.server.port=8081"
+      - "traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=http"
+    depends_on:
+      - traefik
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    command: -H unix:///var/run/docker.sock
+    container_name: portainer
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.102
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - PUID=${PUID} # default user id, defined in .env
+      - PGID=${PGID} # default group id, defined in .env
+      - TZ=${TZ} # timezone, defined in .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./portainer-data:/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.${SERVERNAME}`)"
+      - "traefik.http.routers.portainer.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls=true"
+      - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.portainer.service=portainer"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+    depends_on:
+      - traefik
+
+  watchtower:
+    container_name: watchtower
+    image: containrrr/watchtower:latest
     restart: unless-stopped
+    command: '--label-enable --cleanup --schedule "0 0 4 * * *"'
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # vpn:
+  #   image: bubuntux/nordlynx:latest
+  #   container_name: vpn
+  #   restart: unless-stopped
+  #   cap_add: # required to modify network interfaces
+  #     - NET_ADMIN
+  #     - NET_RAW
+  #   devices:
+  #     - /dev/net/tun
+  #   environment:
+  #     - PRIVATE_KEY=${PRIVATE_KEY}
+  #     - NET_LOCAL=${NETWORK}
+  #     - TZ=${TZ} # timezone, defined in .env
+  #   sysctls:
+  #     - net.ipv6.conf.all.disable_ipv6=1
+  #   expose:
+  #     - "8112"
+  #   depends_on:
+  #     - traefik
 
   deluge:
-    container_name: deluge
     image: linuxserver/deluge:latest
-    restart: unless-stopped
-    network_mode: service:vpn # run on the vpn network
-    #network_mode: host
+    container_name: deluge
+    # restart: unless-stopped
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.160
+    # network_mode: service:vpn # run on the vpn network
+    security_opt:
+      - label:disable
     environment:
       - PUID=${PUID} # default user id, defined in .env
       - PGID=${PGID} # default group id, defined in .env
       - TZ=${TZ} # timezone, defined in .env
+      - DELUGE_LOGLEVEL=error #optional
+      - DOCKER_MODS=ghcr.io/gilbn/theme.park:deluge
     volumes:
       - ${ROOT}/downloads:/downloads # downloads folder
-      - ${CONFIG}/config/deluge:/config # config files
-
-  flaresolverr:
-    container_name: falresolverr
-    image: ghcr.io/flaresolverr/flaresolverr:latest
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
-    volumes:
-      - ${CONFIG}/config/flaresolverr:/config # config files
-
-  jackett:
-    container_name: jackett
-    image: linuxserver/jackett:latest
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${ROOT}/downloads/torrent-blackhole:/downloads # place where to put .torrent files for manual download
-      - ${CONFIG}/config/jackett:/config # config files
-
-  nzbget:
-    container_name: nzbge
-    image: linuxserver/nzbget:latest
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
-    volumes:
-      - ${ROOT}/downloads:/downloads # download folder
-      - ${CONFIG}/config/nzbget:/config # config files
-
-  sonarr:
-    container_name: sonarr
-    image: linuxserver/sonarr:latest
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${CONFIG}/config/sonarr:/config # config files
-      - ${ROOT}/tv:/tv # tv shows folder
-      - ${ROOTNTFS}/completed/series:/series
-      - ${ROOT}/downloads:/downloads # download folder
+      - ${CONFIG}/deluge:/config # config files
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.deluge.rule=Host(`deluge.${SERVERNAME}`)"
+      - "traefik.http.routers.deluge.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.deluge.entrypoints=websecure"
+      - "traefik.http.routers.deluge.tls=true"
+      - "traefik.http.routers.deluge.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.deluge.service=deluge"
+      - "traefik.http.services.deluge.loadbalancer.server.port=8112"
+    depends_on:
+      # - vpn
+      - traefik
 
   radarr:
+    image: linuxserver/radarr:latest
     container_name: radarr
-    image: ghcr.io/linuxserver/radarr:latest
-    restart: unless-stopped
-    network_mode: host
-#    ports:
-#      - 7878:7878
+    expose:
+      - "7878"
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.104
     environment:
       - PUID=${PUID} # default user id, defined in .env
       - PGID=${PGID} # default group id, defined in .env
       - TZ=${TZ} # timezone, defined in .env
+      - DOCKER_MODS=ghcr.io/gilbn/theme.park:radarr
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ${CONFIG}/config/radarr:/config # config files
+      - ${CONFIG}/radarr:/config # config files
       - ${ROOT}/movies:/movies # movies folder
-      - ${ROOTNTFS}/completed/movies:/films
       - ${ROOT}/downloads:/downloads # download folder
-    
-  bazarr:
-    container_name: bazarr
-    image: linuxserver/bazarr:latest
-    restart: unless-stopped
-    network_mode: host
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.radarr.rule=Host(`radarr.${SERVERNAME}`)"
+      - "traefik.http.routers.radarr.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.radarr.entrypoints=websecure"
+      - "traefik.http.routers.radarr.tls=true"
+      - "traefik.http.routers.radarr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.radarr.service=radarr"
+      - "traefik.http.services.radarr.loadbalancer.server.port=7878"
+    depends_on:
+      - traefik
+
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    expose:
+      - "8989"
     environment:
       - PUID=${PUID} # default user id, defined in .env
       - PGID=${PGID} # default group id, defined in .env
       - TZ=${TZ} # timezone, defined in .env
+      - DOCKER_MODS=ghcr.io/gilbn/theme.park:sonarr
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.105
     volumes:
-      - ${CONFIG}/config/bazarr:/config # config files
-      - ${ROOT}/movies:/movies # movies folder, same as Radarr
-      - ${ROOTNTFS}/completed/movies:/films
-      - ${ROOT}/tv:/tv # tv shows folder, same as Sonarr
-      - ${ROOTNTFS}/completed/series:/series
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIG}/sonarr:/config # config files
+      - ${ROOT}/tv:/tv # tv shows folder
+      - ${ROOT}/downloads:/downloads # download folder
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.sonarr.rule=Host(`sonarr.${SERVERNAME}`)"
+      - "traefik.http.routers.sonarr.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.sonarr.entrypoints=websecure"
+      - "traefik.http.routers.sonarr.tls=true"
+      - "traefik.http.routers.sonarr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.sonarr.service=sonarr"
+      - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
+    depends_on:
+      - traefik
 
   plex-server:
+    image: linuxserver/plex:latest
     container_name: plex-server
-    image: greensheep/plex-server-docker-rpi:latest
+    #image: greensheep/plex-server-docker-rpi:latest
     #image: linuxserver/plex:latest
     restart: unless-stopped
-    network_mode: host
+    #network_mode: host
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.106
+    ports:
+      - target: 32400
+        published: 32400
+        protocol: tcp
+        mode: host
+      - target: 32400
+        published: 32400
+        protocol: udp
+        mode: host
+    ulimits:
+      sigpending: 62793
+      nproc: 131072
+      nofile: 60000
+      core: 0
     environment:
       - PUID=${PUID} # default user id, defined in .env
       - PGID=${PGID} # default group id, defined in .env
       - TZ=${TZ} # timezone, defined in .env
       - VERSION=docker
     volumes:
-      - ${CONFIG}/config/plex/db:/config # plex database
-      - ${CONFIG}/config/plex/transcode:/transcode # temp transcoded files
+      - ${CONFIG}/plex/library:/root/Library
+      - ${CONFIG}/plex/db:/config # plex database
+      - ${CONFIG}/plex/transcode:/transcode # temp transcoded files
       - ${ROOT}/tv:/data/tvshows # tvshows library
-      - ${ROOTNTFS}/completed/series:/series
       - ${ROOT}/movies:/data/movies # movies library
-      - ${ROOTNTFS}/completed/movies:/films
       - ${ROOT}/comics:/comics
+      - ${ROOT}/books:/books
+    labels:
+      - com.centurylinklabs.watchtower.enable=true- "traefik.enable=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.plex-server.rule=Host(`plex.${SERVERNAME}`)"
+      - "traefik.http.routers.plex-server.entrypoints=websecure"
+      - "traefik.http.routers.plex-server.tls=true"
+      - "traefik.http.routers.plex-server.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.plex-server.service=plex-server"
+      - "traefik.http.services.plex-server.loadbalancer.server.port=32400"
+    depends_on:
+      - traefik
+
+  # schedule plex sync to trakt every 6h
+  scheduler:
+    image: mcuadros/ofelia:latest
+    container_name: scheduler
+    depends_on:
+      - plextraktsync
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.107
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      ofelia.job-run.plextraktsync.schedule: "@every 6h"
+      ofelia.job-run.plextraktsync.container: "plextraktsync"
+
+  # run `docker-compose run --rm plextraktsync sync` before running compose to setup credentials 
+  plextraktsync:
+    image: ghcr.io/taxel/plextraktsync
+    command: sync
+    container_name: plextraktsync
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.108
+    restart: on-failure:2
+    volumes:
+      - ${CONFIG}/plextraktsync:/app/config
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Tallinn
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  readarr:
+    image: linuxserver/readarr:develop
+    container_name: readarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+      - DOCKER_MODS=ghcr.io/gilbn/theme.park:readarr
+    volumes:
+      - ${CONFIG}/readarr:/config
+      - ${ROOT}/books:/books #optional
+      - ${ROOT}/downloads:/downloads #optional
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.109
+    expose:
+      - "8787"
+    restart: unless-stopped
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.readarr.rule=Host(`readarr.${SERVERNAME}`)"
+      - "traefik.http.routers.readarr.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.readarr.entrypoints=websecure"
+      - "traefik.http.routers.readarr.tls=true"
+      - "traefik.http.routers.readarr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.readarr.service=readarr"
+      - "traefik.http.services.readarr.loadbalancer.server.port=8787"
+    depends_on:
+      - traefik
+
+  bazarr:
+    image: linuxserver/bazarr:latest
+    container_name: bazarr
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.110
+    expose:
+      - "6767"
+    environment:
+      - PUID=${PUID} # default user id, defined in .env
+      - PGID=${PGID} # default group id, defined in .env
+      - TZ=${TZ} # timezone, defined in .env
+      - DOCKER_MODS=ghcr.io/gilbn/theme.park:bazarr
+    volumes:
+      - ${CONFIG}/bazarr:/config # config files
+      - ${ROOT}/movies:/movies # movies folder, same as Radarr
+      - ${ROOT}/tv:/tv # tv shows folder, same as Sonarr
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.bazarr.rule=Host(`bazarr.${SERVERNAME}`)"
+      - "traefik.http.routers.bazarr.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.bazarr.entrypoints=websecure"
+      - "traefik.http.routers.bazarr.tls=true"
+      - "traefik.http.routers.bazarr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.bazarr.service=bazarr"
+      - "traefik.http.services.bazarr.loadbalancer.server.port=6767"
+    depends_on:
+      - traefik
+
+  organizr:
+    container_name: organizr
+    image: organizr/organizr:latest
+    expose:
+      - "80"
+    environment:
+      - PUID=${PUID} # default user id, defined in .env
+      - PGID=${PGID} # default group id, defined in .env
+      - TZ=${TZ} # timezone, defined in .env
+    volumes:
+      - ${CONFIG}/organizr:/config
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.111
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.organizr.rule=Host(`organizr.${SERVERNAME}`)"
+      - "traefik.http.routers.organizr.entrypoints=websecure"
+      - "traefik.http.routers.organizr.tls=true"
+      - "traefik.http.routers.organizr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.organizr.service=organizr"
+      - "traefik.http.services.organizr.loadbalancer.server.port=80"
+    depends_on:
+      - traefik
+
+  overseerr:
+    image: sctx/overseerr:latest
+    container_name: overseerr
+    expose:
+      - "5055"
+    environment:
+      - PUID=${PUID} # default user id, defined in .env
+      - PGID=${PGID} # default group id, defined in .env
+      - LOG_LEVEL=debug
+      - TZ=${TZ}
+  #    - PORT=5055 #optional
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.112
+    ports:
+      - 5055:5055
+    volumes:
+      - ${CONFIG}/overseer:/app/config
+    restart: unless-stopped
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.overseerr.rule=Host(`overseerr.${SERVERNAME}`)"
+      - "traefik.http.routers.overseerr.entrypoints=websecure"
+      - "traefik.http.routers.overseerr.tls=true"
+      - "traefik.http.routers.overseerr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.overseerr.service=overseerr"
+      - "traefik.http.services.overseerr.loadbalancer.server.port=5055"
+    depends_on:
+      - traefik
+
+  flaresolverr:
+    container_name: falresolverr
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    restart: unless-stopped
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.166
+    environment:
+      - PUID=${PUID} # default user id, defined in .env
+      - PGID=${PGID} # default group id, defined in .env
+      - TZ=${TZ} # timezone, defined in .env
+    volumes:
+      - ${CONFIG}/flaresolverr:/config # config files
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.falresolverr.rule=Host(`falresolverr.${SERVERNAME}`)"
+      - "traefik.http.routers.falresolverr.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.falresolverr.entrypoints=websecure"
+      - "traefik.http.routers.falresolverr.tls=true"
+      - "traefik.http.routers.falresolverr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.falresolverr.service=falresolverr"
+      - "traefik.http.services.falresolverr.loadbalancer.server.port=8191"
+    depends_on:
+      - traefik
+
+  jackett:
+    container_name: jackett
+    image: linuxserver/jackett:latest
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.167
+    expose:
+      - "9117"
+    environment:
+      - PUID=${PUID} # default user id, defined in .env
+      - PGID=${PGID} # default group id, defined in .env
+      - TZ=${TZ} # timezone, defined in .env
+      - DOCKER_MODS=ghcr.io/gilbn/theme.park:jackett
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${ROOT}/downloads/torrent-blackhole:/downloads # place where to put .torrent files for manual download
+      - ${CONFIG}/jackett:/config # config files
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.jackett.rule=Host(`jackett.${SERVERNAME}`)"
+      - "traefik.http.routers.jackett.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.jackett.entrypoints=websecure"
+      - "traefik.http.routers.jackett.tls=true"
+      - "traefik.http.routers.jackett.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.jackett.service=jackett"
+      - "traefik.http.services.jackett.loadbalancer.server.port=9117"
+    depends_on:
+      - traefik
