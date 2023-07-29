@@ -456,7 +456,7 @@ services:
       - traefik
 
   flaresolverr:
-    container_name: falresolverr
+    container_name: flaresolverr
     image: ghcr.io/flaresolverr/flaresolverr:latest
     restart: unless-stopped
     <<: *common-keys-media
@@ -472,14 +472,14 @@ services:
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
-      - "traefik.http.routers.falresolverr.rule=Host(`falresolverr.${SERVERNAME}`)"
-      - "traefik.http.routers.falresolverr.middlewares=auth"
+      - "traefik.http.routers.flaresolverr.rule=Host(`flaresolverr.${SERVERNAME}`)"
+      - "traefik.http.routers.flaresolverr.middlewares=auth"
       - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
-      - "traefik.http.routers.falresolverr.entrypoints=websecure"
-      - "traefik.http.routers.falresolverr.tls=true"
-      - "traefik.http.routers.falresolverr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.falresolverr.service=falresolverr"
-      - "traefik.http.services.falresolverr.loadbalancer.server.port=8191"
+      - "traefik.http.routers.flaresolverr.entrypoints=websecure"
+      - "traefik.http.routers.flaresolverr.tls=true"
+      - "traefik.http.routers.flaresolverr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.flaresolverr.service=flaresolverr"
+      - "traefik.http.services.flaresolverr.loadbalancer.server.port=8191"
     depends_on:
       - traefik
 
@@ -512,5 +512,35 @@ services:
       - "traefik.http.routers.jackett.tls.certresolver=letsencrypt"
       - "traefik.http.routers.jackett.service=jackett"
       - "traefik.http.services.jackett.loadbalancer.server.port=9117"
+    depends_on:
+      - traefik
+
+  duplicati:
+    container_name: duplicati
+    image: linuxserver/duplicati:latest
+    restart: unless-stopped
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.168
+    expose:
+      - "8200"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG}/duplicati:/config
+      - ${CONFIG}:/source
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.duplicati.rule=Host(`duplicati.${SERVERNAME}`)"
+      - "traefik.http.routers.duplicati.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.duplicati.entrypoints=websecure"
+      - "traefik.http.routers.duplicati.tls=true"
+      - "traefik.http.routers.duplicati.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.duplicati.service=duplicati"
+      - "traefik.http.services.duplicati.loadbalancer.server.port=8200"
     depends_on:
       - traefik
