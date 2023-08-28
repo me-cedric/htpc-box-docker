@@ -3,6 +3,9 @@ version: "3.9"
 networks:
   default:
     driver: bridge
+  nextcloud:
+    name: nextcould
+    driver: bridge
   npm_proxy:
     name: npm_proxy
     driver: bridge
@@ -16,6 +19,10 @@ x-common-keys-media: &common-keys-media
   security_opt:
     - no-new-privileges:true
   restart: unless-stopped
+
+volumes:
+  nextcloud_aio_mastercontainer:
+    name: nextcloud_aio_mastercontainer
 
 services:
   traefik:
@@ -33,12 +40,12 @@ services:
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
+      - --serverstransport.insecureskipverify=true
       - "--certificatesresolvers.letsencrypt.acme.email=${EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
     ports:
-      - 80:80
       - 443:443
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -544,3 +551,78 @@ services:
       - "traefik.http.services.duplicati.loadbalancer.server.port=8200"
     depends_on:
       - traefik
+
+  database:
+    image: mariadb:10
+    container_name: database
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+    networks:
+      - nextcloud
+    volumes:
+      - ${CONFIG}/mariadb:/var/lib/mysql
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    networks:
+      nextcloud:
+    restart: unless-stopped
+
+  nextcloud:
+    image: nextcloud:latest
+    container_name: nextcloud
+    restart: unless-stopped
+    depends_on:
+      - database
+      - redis
+      - traefik
+    hostname: nextcloud.${SERVERNAME}
+    volumes:
+      - ${CONFIG}/nextcloud:/var/www/html
+#      - ${ROOT}/nextcloud:/var/www/html/data
+      - ${ROOT}:/nas-share
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.170
+      nextcloud:
+    environment:
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_HOST=database
+      - REDIS_HOST=redis
+      - "NEXTCLOUD_TRUSTED_DOMAINS=localhost 0.0.0.0 192.168.89.0 ${SERVERNAME} organizr.${SERVERNAME} nextcloud.${SERVERNAME}"
+      - TRUSTED_PROXIES=192.168.89.0/24
+      - OVERWRITEPROTOCOL=https
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 3
+#      start_period: 90s
+    ports:
+      - 8282:80
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.${SERVERNAME}`)"
+      - "traefik.http.routers.nextcloud.middlewares=auth,nextcloud-dav,nextcloud-headers"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.nextcloud.entrypoints=websecure"
+      - "traefik.http.routers.nextcloud.tls=true"
+      - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.nextcloud.service=nextcloud"
+      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.regex=^/.well-known/ca(l|rd)dav"
+      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.replacement=/remote.php/dav/"
+      - "traefik.http.middlewares.nextcloud-headers.headers.stsSeconds=15552000"
+      - "traefik.http.middlewares.nextcloud-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.nextcloud-headers.headers.stsPreload=true"
+      - "traefik.http.middlewares.nextcloud-headers.headers.forceSTSHeader=true"
+      - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
+      - "traefik.docker.network=npm_proxy"
