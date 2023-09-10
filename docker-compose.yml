@@ -260,10 +260,7 @@ services:
   plex-server:
     image: linuxserver/plex:latest
     container_name: plex-server
-    #image: greensheep/plex-server-docker-rpi:latest
-    #image: linuxserver/plex:latest
     restart: unless-stopped
-    #network_mode: host
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.106
@@ -292,8 +289,6 @@ services:
       - ${CONFIG}/plex/transcode:/transcode # temp transcoded files
       - ${ROOT}/tv:/data/tvshows # tvshows library
       - ${ROOT}/movies:/data/movies # movies library
-      - ${ROOT}/comics:/comics
-      - ${ROOT}/books:/books
     labels:
       - com.centurylinklabs.watchtower.enable=true- "traefik.enable=true"
       - "traefik.enable=true"
@@ -350,7 +345,7 @@ services:
       - DOCKER_MODS=ghcr.io/gilbn/theme.park:readarr
     volumes:
       - ${CONFIG}/readarr:/config
-      - ${ROOT}/books:/books #optional
+      - ${ROOT}/ebooks/books:/books #optional
       - ${ROOT}/downloads:/downloads #optional
     networks:
       npm_proxy:
@@ -626,3 +621,36 @@ services:
       - "traefik.http.middlewares.nextcloud-headers.headers.forceSTSHeader=true"
       - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
       - "traefik.docker.network=npm_proxy"
+
+  kavita:
+    image: kizaing/kavita:latest
+    container_name: kavita
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.171
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${CONFIG}/kavita:/kavita/config
+      - ${ROOT}/ebooks/comics:/comics
+      - ${ROOT}/ebooks/bd:/bd
+      - ${ROOT}/ebooks/books:/books
+      - ${ROOT}/ebooks/manga:/manga
+    expose:
+      - "5000"
+    restart: unless-stopped
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.kavita.rule=Host(`kavita.${SERVERNAME}`)"
+      - "traefik.http.routers.kavita.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.kavita.entrypoints=websecure"
+      - "traefik.http.routers.kavita.tls=true"
+      - "traefik.http.routers.kavita.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.kavita.service=kavita"
+      - "traefik.http.services.kavita.loadbalancer.server.port=5000"
+    depends_on:
+      - traefik
