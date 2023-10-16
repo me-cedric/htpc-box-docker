@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   default:
     driver: bridge
@@ -46,6 +44,7 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
     ports:
+      - 80:80
       - 443:443
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -65,20 +64,18 @@ services:
       - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
-      # middleware redirect
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
-  #truenas
   nginx:
     image: nginx:latest
-    container_name: nginx
+    container_name: truenas
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.101
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
     labels:
@@ -107,9 +104,9 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./portainer-data:/data
@@ -137,45 +134,24 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
-  # vpn:
-  #   image: bubuntux/nordlynx:latest
-  #   container_name: vpn
-  #   restart: unless-stopped
-  #   cap_add: # required to modify network interfaces
-  #     - NET_ADMIN
-  #     - NET_RAW
-  #   devices:
-  #     - /dev/net/tun
-  #   environment:
-  #     - PRIVATE_KEY=${PRIVATE_KEY}
-  #     - NET_LOCAL=${NETWORK}
-  #     - TZ=${TZ} # timezone, defined in .env
-  #   sysctls:
-  #     - net.ipv6.conf.all.disable_ipv6=1
-  #   expose:
-  #     - "8112"
-  #   depends_on:
-  #     - traefik
-
   deluge:
     image: linuxserver/deluge:latest
     container_name: deluge
-    # restart: unless-stopped
+    restart: unless-stopped
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.160
-    # network_mode: service:vpn # run on the vpn network
     security_opt:
       - label:disable
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
-      - DELUGE_LOGLEVEL=error #optional
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - DELUGE_LOGLEVEL=error
       - DOCKER_MODS=ghcr.io/gilbn/theme.park:deluge
     volumes:
-      - ${ROOT}/downloads:/downloads # downloads folder
-      - ${CONFIG}/deluge:/config # config files
+      - ${ROOT}/downloads:/downloads
+      - ${CONFIG}/deluge:/config
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
@@ -188,7 +164,6 @@ services:
       - "traefik.http.routers.deluge.service=deluge"
       - "traefik.http.services.deluge.loadbalancer.server.port=8112"
     depends_on:
-      # - vpn
       - traefik
 
   radarr:
@@ -201,15 +176,15 @@ services:
       npm_proxy:
         ipv4_address: 192.168.89.104
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
       - DOCKER_MODS=ghcr.io/gilbn/theme.park:radarr
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ${CONFIG}/radarr:/config # config files
-      - ${ROOT}/movies:/movies # movies folder
-      - ${ROOT}/downloads:/downloads # download folder
+      - ${CONFIG}/radarr:/config
+      - ${ROOT}/movies:/movies
+      - ${ROOT}/downloads:/downloads
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
@@ -230,9 +205,9 @@ services:
     expose:
       - "8989"
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
       - DOCKER_MODS=ghcr.io/gilbn/theme.park:sonarr
     <<: *common-keys-media
     networks:
@@ -240,9 +215,9 @@ services:
         ipv4_address: 192.168.89.105
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - ${CONFIG}/sonarr:/config # config files
-      - ${ROOT}/tv:/tv # tv shows folder
-      - ${ROOT}/downloads:/downloads # download folder
+      - ${CONFIG}/sonarr:/config
+      - ${ROOT}/tv:/tv
+      - ${ROOT}/downloads:/downloads
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
@@ -279,16 +254,16 @@ services:
       nofile: 60000
       core: 0
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
       - VERSION=docker
     volumes:
       - ${CONFIG}/plex/library:/root/Library
-      - ${CONFIG}/plex/db:/config # plex database
-      - ${CONFIG}/plex/transcode:/transcode # temp transcoded files
-      - ${ROOT}/tv:/data/tvshows # tvshows library
-      - ${ROOT}/movies:/data/movies # movies library
+      - ${CONFIG}/plex/db:/config
+      - ${CONFIG}/plex/transcode:/transcode
+      - ${ROOT}/tv:/data/tvshows
+      - ${ROOT}/movies:/data/movies
     labels:
       - com.centurylinklabs.watchtower.enable=true- "traefik.enable=true"
       - "traefik.enable=true"
@@ -339,14 +314,14 @@ services:
     image: linuxserver/readarr:develop
     container_name: readarr
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/London
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
       - DOCKER_MODS=ghcr.io/gilbn/theme.park:readarr
     volumes:
       - ${CONFIG}/readarr:/config
-      - ${ROOT}/ebooks/books:/books #optional
-      - ${ROOT}/downloads:/downloads #optional
+      - ${ROOT}/ebooks/books:/books
+      - ${ROOT}/downloads:/downloads
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.109
@@ -377,14 +352,14 @@ services:
     expose:
       - "6767"
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
       - DOCKER_MODS=ghcr.io/gilbn/theme.park:bazarr
     volumes:
-      - ${CONFIG}/bazarr:/config # config files
-      - ${ROOT}/movies:/movies # movies folder, same as Radarr
-      - ${ROOT}/tv:/tv # tv shows folder, same as Sonarr
+      - ${CONFIG}/bazarr:/config
+      - ${ROOT}/movies:/movies
+      - ${ROOT}/tv:/tv
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
@@ -405,9 +380,9 @@ services:
     expose:
       - "80"
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
       - ${CONFIG}/organizr:/config
     <<: *common-keys-media
@@ -432,11 +407,10 @@ services:
     expose:
       - "5055"
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
       - LOG_LEVEL=debug
       - TZ=${TZ}
-  #    - PORT=5055 #optional
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.112
@@ -466,11 +440,11 @@ services:
       npm_proxy:
         ipv4_address: 192.168.89.166
     environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
     volumes:
-      - ${CONFIG}/flaresolverr:/config # config files
+      - ${CONFIG}/flaresolverr:/config
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
@@ -482,38 +456,6 @@ services:
       - "traefik.http.routers.flaresolverr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.flaresolverr.service=flaresolverr"
       - "traefik.http.services.flaresolverr.loadbalancer.server.port=8191"
-    depends_on:
-      - traefik
-
-  jackett:
-    container_name: jackett
-    image: linuxserver/jackett:latest
-    <<: *common-keys-media
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.167
-    expose:
-      - "9117"
-    environment:
-      - PUID=${PUID} # default user id, defined in .env
-      - PGID=${PGID} # default group id, defined in .env
-      - TZ=${TZ} # timezone, defined in .env
-      - DOCKER_MODS=ghcr.io/gilbn/theme.park:jackett
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${ROOT}/downloads/torrent-blackhole:/downloads # place where to put .torrent files for manual download
-      - ${CONFIG}/jackett:/config # config files
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.jackett.rule=Host(`jackett.${SERVERNAME}`)"
-      - "traefik.http.routers.jackett.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
-      - "traefik.http.routers.jackett.entrypoints=websecure"
-      - "traefik.http.routers.jackett.tls=true"
-      - "traefik.http.routers.jackett.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.jackett.service=jackett"
-      - "traefik.http.services.jackett.loadbalancer.server.port=9117"
     depends_on:
       - traefik
 
@@ -580,7 +522,6 @@ services:
     hostname: nextcloud.${SERVERNAME}
     volumes:
       - ${CONFIG}/nextcloud:/var/www/html
-#      - ${ROOT}/nextcloud:/var/www/html/data
       - ${ROOT}:/nas-share
     networks:
       npm_proxy:
@@ -595,12 +536,6 @@ services:
       - "NEXTCLOUD_TRUSTED_DOMAINS=localhost 0.0.0.0 192.168.89.0 ${SERVERNAME} organizr.${SERVERNAME} nextcloud.${SERVERNAME}"
       - TRUSTED_PROXIES=192.168.89.0/24
       - OVERWRITEPROTOCOL=https
-#    healthcheck:
-#      test: ["CMD", "curl", "-f", "http://localhost:80/"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 3
-#      start_period: 90s
     ports:
       - 8282:80
     labels:
@@ -652,5 +587,34 @@ services:
       - "traefik.http.routers.kavita.tls.certresolver=letsencrypt"
       - "traefik.http.routers.kavita.service=kavita"
       - "traefik.http.services.kavita.loadbalancer.server.port=5000"
+    depends_on:
+      - traefik
+
+  prowlarr:
+    image: linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    expose:
+      - "9696"
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.172
+    volumes:
+      - ${CONFIG}/prowlarr:/config
+    restart: unless-stopped
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.prowlarr.rule=Host(`prowlarr.${SERVERNAME}`)"
+      - "traefik.http.routers.prowlarr.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.prowlarr.entrypoints=websecure"
+      - "traefik.http.routers.prowlarr.tls=true"
+      - "traefik.http.routers.prowlarr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prowlarr.service=prowlarr"
+      - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"
     depends_on:
       - traefik
