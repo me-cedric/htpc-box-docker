@@ -134,46 +134,40 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
-#  qbittorrent:
-#    image: linuxserver/qbittorrent:latest
-#    container_name: qbittorrent
-#    restart: unless-stopped
-#    networks:
-#      npm_proxy:
-#        ipv4_address: 192.168.89.161
-#    expose:
-#      - "6881"
-#    security_opt:
-#      - label:disable
-#    environment:
-#      - PUID=${PUID}
-#      - PGID=${PGID}
-#      - TZ=${TZ}
-#      - WEBUI_PORT=8080
-#    volumes:
-#      - ${ROOT}/downloads:/downloads
-#      - ${CONFIG}/qbittorrent:/config
-#    labels:
-#      - com.centurylinklabs.watchtower.enable=true
-#      - "traefik.enable=true"
-#      - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.${SERVERNAME}`)"
-#      - "traefik.http.routers.qbittorrent.middlewares=auth"
-#      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
-#      - "traefik.http.routers.qbittorrent.entrypoints=websecure"
-#      - "traefik.http.routers.qbittorrent.tls=true"
-#      - "traefik.http.routers.qbittorrent.tls.certresolver=letsencrypt"
-#      - "traefik.http.routers.qbittorrent.service=qbittorrent"
-#      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8080"
-#    depends_on:
-#      - traefik
+  nordvpn:
+    container_name: nordvpn
+    image: azinchen/nordvpn:latest
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.160
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun
+    environment:
+      - USER=${VPN_USER}
+      - PASS=${VPN_PWD}
+      - COUNTRY=${VPN_COUNTRY}
+      - GROUP=Standard VPN servers
+      - RANDOM_TOP=10
+      - RECREATE_VPN_CRON=5 */3 * * *
+      - NETWORK=${NETWORK}
+      - OPENVPN_OPTS=--mute-replay-warnings
+      - TZ=${TZ}
+    ports:
+      - 8112:8112
+    depends_on:
+      - traefik
 
   deluge:
     image: linuxserver/deluge:latest
     container_name: deluge
     restart: unless-stopped
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.160
+    network_mode: service:nordvpn
+#    networks:
+#      npm_proxy:
+#        ipv4_address: 192.168.89.160
     security_opt:
       - label:disable
     environment:
@@ -199,6 +193,7 @@ services:
       - "traefik.http.services.deluge.loadbalancer.server.port=8112"
     depends_on:
       - traefik
+      - nordvpn
 
   radarr:
     image: linuxserver/radarr:latest
