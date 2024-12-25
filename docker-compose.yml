@@ -151,7 +151,7 @@ services:
       - COUNTRY=${VPN_COUNTRY}
       - GROUP=Standard VPN servers
       - RANDOM_TOP=10
-      - RECREATE_VPN_CRON=5 */3 * * *
+#      - RECREATE_VPN_CRON=5 */3 * * *
       - NETWORK=${NETWORK}
       - OPENVPN_OPTS=--mute-replay-warnings
       - TZ=${TZ}
@@ -284,11 +284,20 @@ services:
       nproc: 131072
       nofile: 60000
       core: 0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
       - VERSION=docker
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
     volumes:
       - ${CONFIG}/plex/library:/root/Library
       - ${CONFIG}/plex/db:/config
@@ -512,6 +521,7 @@ services:
       - TZ=${TZ}
       - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:duplicati
       - TP_THEME=overseerr
+      - DUPLICATI__WEBSERVICE_PASSWORD=${DUPLICATI__WEBSERVICE_PASSWORD}
     volumes:
       - ${CONFIG}/duplicati:/config
       - ${CONFIG}:/source
