@@ -674,3 +674,57 @@ services:
       - sonarr
       - readarr
       - flaresolverr
+
+  tdarr:
+    container_name: tdarr
+    image: ghcr.io/haveagitgat/tdarr:latest
+    restart: unless-stopped
+    expose:
+      - "8265" # webUI port
+      - "8266" # server port
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.173
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - UMASK_SET=002
+      - serverIP=0.0.0.0
+      - serverPort=8266
+      - webUIPort=8265
+      - internalNode=true
+      - inContainer=true
+      - ffmpegVersion=6
+      - nodeName=TdarrInternalNode
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ${CONFIG}/tdarr/server:/app/server
+      - ${CONFIG}/tdarr/configs:/app/configs
+      - ./logs/tdarr:/app/logs
+      - ${ROOT}/movies:/media/movies
+      - ${ROOT}/tv:/media/tv
+      - ./transcode_cache:/temp
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.tdarr.rule=Host(`tdarr.${SERVERNAME}`)"
+      - "traefik.http.routers.tdarr.middlewares=auth"
+      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.tdarr.entrypoints=websecure"
+      - "traefik.http.routers.tdarr.tls=true"
+      - "traefik.http.routers.tdarr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.tdarr.service=tdarr"
+      - "traefik.http.services.tdarr.loadbalancer.server.port=8265"
+    depends_on:
+      - traefik

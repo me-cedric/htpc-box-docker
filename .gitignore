@@ -3,3 +3,5 @@ nginx.conf
 certs/*
 letsencrypt/*
 portainer-data/*
+transcode_cache/*
+logs/*
