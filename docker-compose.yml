@@ -353,39 +353,6 @@ services:
     depends_on:
       - plex-server
 
-  readarr:
-    image: linuxserver/readarr:develop
-    container_name: readarr
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:readarr
-      - TP_THEME=overseerr
-    volumes:
-      - ${CONFIG}/readarr:/config
-      - ${ROOT}/ebooks/books:/books
-      - ${ROOT}/downloads:/downloads
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.109
-    expose:
-      - "8787"
-    restart: unless-stopped
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.readarr.rule=Host(`readarr.${SERVERNAME}`)"
-      - "traefik.http.routers.readarr.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
-      - "traefik.http.routers.readarr.entrypoints=websecure"
-      - "traefik.http.routers.readarr.tls=true"
-      - "traefik.http.routers.readarr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.readarr.service=readarr"
-      - "traefik.http.services.readarr.loadbalancer.server.port=8787"
-    depends_on:
-      - traefik
-
   bazarr:
     image: linuxserver/bazarr:latest
     container_name: bazarr
