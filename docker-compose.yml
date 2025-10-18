@@ -59,12 +59,24 @@ services:
       - "traefik.http.routers.traefik.tls=true"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.middlewares=auth"
+      - "traefik.http.routers.traefik.middlewares=auth-admin"
       - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
       - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # Admin-only
+      - "traefik.http.middlewares.auth-admin.forwardauth.address=http://organizr/api/v2/auth/1"
+      # Power User and above
+      - "traefik.http.middlewares.auth-power.forwardauth.address=http://organizr/api/v2/auth/2"
+      # All logged-in users (User+)
+      - "traefik.http.middlewares.auth-user.forwardauth.address=http://organizr/api/v2/auth/3"
+      - "traefik.http.middlewares.auth-admin.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.auth-admin.forwardauth.authRequestHeaders=Cookie,Authorization"
+      - "traefik.http.middlewares.auth-power.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.auth-power.forwardauth.authRequestHeaders=Cookie,Authorization"
+      - "traefik.http.middlewares.auth-user.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.auth-user.forwardauth.authRequestHeaders=Cookie,Authorization"
 
   nginx:
     image: nginx:latest
@@ -82,8 +94,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.nginx.rule=Host(`truenas.${SERVERNAME}`)"
-      - "traefik.http.routers.nginx.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.nginx.middlewares=auth-admin"
       - "traefik.http.routers.nginx.entrypoints=websecure"
       - "traefik.http.routers.nginx.tls=true"
       - "traefik.http.routers.nginx.tls.certresolver=letsencrypt"
@@ -114,8 +125,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.portainer.rule=Host(`portainer.${SERVERNAME}`)"
-      - "traefik.http.routers.portainer.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.portainer.middlewares=auth-admin"
       - "traefik.http.routers.portainer.entrypoints=websecure"
       - "traefik.http.routers.portainer.tls=true"
       - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
@@ -136,7 +146,7 @@ services:
 
   nordvpn:
     container_name: nordvpn
-    image: azinchen/nordvpn:latest
+    image: azinchen/nordvpn:4.1.0
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.160
@@ -157,6 +167,18 @@ services:
       - TZ=${TZ}
     ports:
       - 8112:8112
+      - 58846:58846
+      - 58946:58946
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.deluge.rule=Host(`deluge.${SERVERNAME}`)"
+      - "traefik.http.routers.deluge.middlewares=auth-admin"
+      - "traefik.http.routers.deluge.entrypoints=websecure"
+      - "traefik.http.routers.deluge.tls=true"
+      - "traefik.http.routers.deluge.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.deluge.service=deluge"
+      - "traefik.http.services.deluge.loadbalancer.server.port=8112"
     depends_on:
       - traefik
 
@@ -180,17 +202,6 @@ services:
     volumes:
       - ${ROOT}/downloads:/downloads
       - ${CONFIG}/deluge:/config
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.deluge.rule=Host(`deluge.${SERVERNAME}`)"
-      - "traefik.http.routers.deluge.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
-      - "traefik.http.routers.deluge.entrypoints=websecure"
-      - "traefik.http.routers.deluge.tls=true"
-      - "traefik.http.routers.deluge.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.deluge.service=deluge"
-      - "traefik.http.services.deluge.loadbalancer.server.port=8112"
     depends_on:
       - traefik
       - nordvpn
@@ -219,8 +230,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.radarr.rule=Host(`radarr.${SERVERNAME}`)"
-      - "traefik.http.routers.radarr.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.radarr.middlewares=auth-admin"
       - "traefik.http.routers.radarr.entrypoints=websecure"
       - "traefik.http.routers.radarr.tls=true"
       - "traefik.http.routers.radarr.tls.certresolver=letsencrypt"
@@ -253,8 +263,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.sonarr.rule=Host(`sonarr.${SERVERNAME}`)"
-      - "traefik.http.routers.sonarr.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.sonarr.middlewares=auth-admin"
       - "traefik.http.routers.sonarr.entrypoints=websecure"
       - "traefik.http.routers.sonarr.tls=true"
       - "traefik.http.routers.sonarr.tls.certresolver=letsencrypt"
@@ -376,8 +385,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.bazarr.rule=Host(`bazarr.${SERVERNAME}`)"
-      - "traefik.http.routers.bazarr.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.bazarr.middlewares=auth-user"
       - "traefik.http.routers.bazarr.entrypoints=websecure"
       - "traefik.http.routers.bazarr.tls=true"
       - "traefik.http.routers.bazarr.tls.certresolver=letsencrypt"
@@ -392,6 +400,8 @@ services:
     expose:
       - "80"
     environment:
+      - fpm=true #true or false | using true will provide better performance
+      - branch=v2-develop #v2-master or #v2-develop
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
@@ -435,6 +445,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.overseerr.rule=Host(`overseerr.${SERVERNAME}`)"
+      - "traefik.http.routers.overseerr.middlewares=auth-user"
       - "traefik.http.routers.overseerr.entrypoints=websecure"
       - "traefik.http.routers.overseerr.tls=true"
       - "traefik.http.routers.overseerr.tls.certresolver=letsencrypt"
@@ -463,8 +474,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.flaresolverr.rule=Host(`flaresolverr.${SERVERNAME}`)"
-      - "traefik.http.routers.flaresolverr.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.flaresolverr.middlewares=auth-admin"
       - "traefik.http.routers.flaresolverr.entrypoints=websecure"
       - "traefik.http.routers.flaresolverr.tls=true"
       - "traefik.http.routers.flaresolverr.tls.certresolver=letsencrypt"
@@ -496,8 +506,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.duplicati.rule=Host(`duplicati.${SERVERNAME}`)"
-      - "traefik.http.routers.duplicati.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.duplicati.middlewares=auth-admin"
       - "traefik.http.routers.duplicati.entrypoints=websecure"
       - "traefik.http.routers.duplicati.tls=true"
       - "traefik.http.routers.duplicati.tls.certresolver=letsencrypt"
@@ -559,8 +568,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.${SERVERNAME}`)"
-      - "traefik.http.routers.nextcloud.middlewares=auth,nextcloud-dav,nextcloud-headers"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.nextcloud.middlewares=auth-admin,nextcloud-dav,nextcloud-headers"
       - "traefik.http.routers.nextcloud.entrypoints=websecure"
       - "traefik.http.routers.nextcloud.tls=true"
       - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
@@ -597,8 +605,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.kavita.rule=Host(`kavita.${SERVERNAME}`)"
-      - "traefik.http.routers.kavita.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.kavita.middlewares=auth-admin"
       - "traefik.http.routers.kavita.entrypoints=websecure"
       - "traefik.http.routers.kavita.tls=true"
       - "traefik.http.routers.kavita.tls.certresolver=letsencrypt"
@@ -628,8 +635,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.prowlarr.rule=Host(`prowlarr.${SERVERNAME}`)"
-      - "traefik.http.routers.prowlarr.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.prowlarr.middlewares=auth-admin"
       - "traefik.http.routers.prowlarr.entrypoints=websecure"
       - "traefik.http.routers.prowlarr.tls=true"
       - "traefik.http.routers.prowlarr.tls.certresolver=letsencrypt"
@@ -639,7 +645,6 @@ services:
       - traefik
       - radarr
       - sonarr
-      - readarr
       - flaresolverr
 
   tdarr:
@@ -686,8 +691,7 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.tdarr.rule=Host(`tdarr.${SERVERNAME}`)"
-      - "traefik.http.routers.tdarr.middlewares=auth"
-      - "traefik.http.middlewares.auth.forwardauth.address=http://organizr/api/v2/auth/1"
+      - "traefik.http.routers.tdarr.middlewares=auth-admin"
       - "traefik.http.routers.tdarr.entrypoints=websecure"
       - "traefik.http.routers.tdarr.tls=true"
       - "traefik.http.routers.tdarr.tls.certresolver=letsencrypt"
