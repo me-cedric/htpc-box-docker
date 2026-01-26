@@ -1,0 +1,28 @@
+server:
+  hostname: auth.yourdomain.com
+  port: 4181
+  basePath: /forward
+
+logs:
+  level: info
+
+cookies:
+  domain: yourdomain.com
+  namePrefix: forward-auth
+
+tokens:
+  signingKey: "same as cookie from env vars"
+  sessionLifetime: 336h
+
+defaultPortal: "homarr"
+
+portals:
+  - name: "homarr"
+    displayName: "HTPC"
+    providers:
+      - pocketID:
+          endpoint: "https://auth.yourdomain.com"
+          clientID: "from pocketid config"
+          clientSecret: "from pocketid config"
+          scopes: "openid profile email groups"
+          enablePKCE: true
