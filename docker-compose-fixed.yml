@@ -108,7 +108,7 @@ services:
       # ForwardAuth: authentication
       - "traefik.http.middlewares.forward-auth.forwardauth.address=http://traefik-forward-auth:4181/forward/portals/homarr"
       - "traefik.http.middlewares.forward-auth.forwardauth.trustforwardheader=true"
-      - "traefik.http.middlewares.forward-auth.forwardauth.authresponseheaders=X-Forwarded-User,X-Forwarded-Email,X-Forwarded-Groups,X-Forwarded-Displayname,X-Authenticated-User,X-Forwarded-For,X-Forwarded-Proto"
+      - "traefik.http.middlewares.forward-auth.forwardauth.authresponseheaders=X-Forwarded-User,X-Forwarded-Email,X-Forwarded-Groups,X-Forwarded-Displayname,X-Authenticated-User"
       - "traefik.enable=true"
       - "traefik.http.routers.forward-auth.rule=Host(`auth.${SERVERNAME}`) && PathPrefix(`/forward`)"
       - "traefik.http.routers.forward-auth.entrypoints=websecure"
@@ -184,12 +184,13 @@ services:
       - traefik
 
   ############################
-  # Seerr (user group)
+  # Overseerr (user group)
   ############################
-  seerr:
-    image: ghcr.io/seerr-team/seerr:latest
-    init: true
-    container_name: seerr
+  overseerr:
+    image: sctx/overseerr:latest
+    container_name: overseerr
+    ports:
+      - "5055"
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -201,18 +202,18 @@ services:
     ports:
       - 5055:5055
     volumes:
-      - ${CONFIG}/seer:/app/config
+      - ${CONFIG}/overseer:/app/config
     restart: unless-stopped
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
-      - "traefik.http.routers.seerr.rule=Host(`seerr.${SERVERNAME}`)"
-      - "traefik.http.routers.seerr.middlewares=sanitize-headers,forward-auth,auth-user"
-      - "traefik.http.routers.seerr.entrypoints=websecure"
-      - "traefik.http.routers.seerr.tls=true"
-      - "traefik.http.routers.seerr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.seerr.service=seerr"
-      - "traefik.http.services.seerr.loadbalancer.server.port=5055"
+      - "traefik.http.routers.overseerr.rule=Host(`overseerr.${SERVERNAME}`)"
+      - "traefik.http.routers.overseerr.middlewares=sanitize-headers,forward-auth,auth-user"
+      - "traefik.http.routers.overseerr.entrypoints=websecure"
+      - "traefik.http.routers.overseerr.tls=true"
+      - "traefik.http.routers.overseerr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.overseerr.service=overseerr"
+      - "traefik.http.services.overseerr.loadbalancer.server.port=5055"
     depends_on:
       - traefik
 
@@ -283,9 +284,9 @@ services:
   ############################
   watchtower:
     container_name: watchtower
-    image: nickfedor/watchtower:latest
+    image: containrrr/watchtower:latest
     restart: unless-stopped
-    command: --interval 43200
+    command: '--label-enable --cleanup --schedule "0 0 4 * * *"'
     labels:
       - com.centurylinklabs.watchtower.enable=true
     volumes:
@@ -317,7 +318,6 @@ services:
       - TZ=${TZ}
     ports:
       - 8112:8112
-      - 8123:8123
       - 58846:58846
       - 58946:58946
       - 6881:6881
@@ -332,35 +332,32 @@ services:
       - "traefik.http.routers.deluge.tls.certresolver=letsencrypt"
       - "traefik.http.routers.deluge.service=deluge"
       - "traefik.http.services.deluge.loadbalancer.server.port=8112"
-      - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.${SERVERNAME}`)"
-      - "traefik.http.routers.qbittorrent.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.qbittorrent.entrypoints=websecure"
-      - "traefik.http.routers.qbittorrent.tls=true"
-      - "traefik.http.routers.qbittorrent.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.qbittorrent.service=qbittorrent"
-      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8123"
     depends_on:
       - traefik
 
   ############################
-  # Qbittorrent (behind NordVPN)
+  # Deluge (behind NordVPN)
   ############################
-  qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: qbittorrent
+  deluge:
+    image: linuxserver/deluge:latest
+    container_name: deluge
     restart: unless-stopped
     network_mode: service:nordvpn
+    #    networks:
+    #      npm_proxy:
+    #        ipv4_address: 192.168.89.160
+    security_opt:
+      - label:disable
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:qbittorrent
+      - DELUGE_LOGLEVEL=error
+      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:deluge
       - TP_THEME=dracula
-      - WEBUI_PORT=8123
-      - TORRENTING_PORT=6881
     volumes:
-      - ${CONFIG}/qbittorrent:/config
       - ${ROOT}/downloads:/downloads
+      - ${CONFIG}/deluge:/config
     depends_on:
       - traefik
       - nordvpn
@@ -437,40 +434,6 @@ services:
     depends_on:
       - traefik
 
-  swaparr-radarr:
-    image: ghcr.io/thijmengthn/swaparr:latest
-    container_name: swaparr-radarr
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.117
-    restart: always
-    environment:
-      - BASEURL=http://192.168.89.104:7878 # IP or FQDN           (Required)
-      - APIKEY=REDACTED_RADARR_API_KEY___ # Radarr API Key       (Required)                
-      - PLATFORM=radarr               # "radarr", "sonarr".. (Optional) default: radarr
-      - TIME_THRESHOLD=2h             # 1d, 6h, 30m, etc..   (Optional) default: 2h    
-      - SIZE_THRESHOLD=25GB           # 1TB, 1GB, 1MB, etc.. (Optional) default: 25GB  
-      - CHECK_INTERVAL=10m            # 1d, 6h, 30m, etc..   (Optional) default: 10m   
-      - STRIKE_THRESHOLD=3            # Positive number      (Optional) default: 3     
-      - AGGRESSIVE_STRIKES=true      # Boolean              (Optional) default: false 
-
-  swaparr-sonarr:
-    image: ghcr.io/thijmengthn/swaparr:latest
-    container_name: swaparr-sonarr
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.118
-    restart: always
-    environment:
-      - BASEURL=http://192.168.89.105:8989 # IP or FQDN           (Required)
-      - APIKEY=REDACTED_SONARR_API_KEY___ # Sonarr API Key       (Required)                
-      - PLATFORM=sonarr               # "radarr", "sonarr".. (Optional) default: radarr
-      - TIME_THRESHOLD=2h             # 1d, 6h, 30m, etc..   (Optional) default: 2h    
-      - SIZE_THRESHOLD=25GB           # 1TB, 1GB, 1MB, etc.. (Optional) default: 25GB  
-      - CHECK_INTERVAL=10m            # 1d, 6h, 30m, etc..   (Optional) default: 10m   
-      - STRIKE_THRESHOLD=3            # Positive number      (Optional) default: 3     
-      - AGGRESSIVE_STRIKES=true      # Boolean              (Optional) default: false
-
   ############################
   # Plex (open access)
   ############################
@@ -509,8 +472,6 @@ services:
       - VERSION=docker
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
-      # Only on first boot
-      # - PLEX_CLAIM=${PLEX_CLAIM}
     volumes:
       - ${CONFIG}/plex/library:/root/Library
       - ${CONFIG}/plex/db:/config
@@ -879,36 +840,36 @@ services:
   ############################
   # Clawdbot - AI Assistant
   ############################
-#  clawdbot:
-#    container_name: clawdbot
-#    image: clawdbot:local
-#    command: ["node", "dist/index.js", "gateway"]
-#    ports:
-#      - "18789:18789"
-#    networks:
-#      npm_proxy:
-#        ipv4_address: 192.168.89.115
-#    <<: *common-keys-media
-#    environment:
-#      - PUID=${PUID}
-#      - PGID=${PGID}
-#      - TZ=${TZ}
-#      - HOME=/home/node
-#      - TERM=xterm-256color
-#      - BROWSER=echo
-#    volumes:
-#      - ${CONFIG}/clawdbot:/home/node/.clawdbot
-#      - ${ROOT}/clawdbot-workspace:/home/node/clawd
-#      - /var/run/docker.sock:/var/run/docker.sock:ro
-#    labels:
-#      - com.centurylinklabs.watchtower.enable=true
-#      - "traefik.enable=true"
-#      - "traefik.http.routers.clawdbot.rule=Host(`clawdbot.${SERVERNAME}`)"
-#      - "traefik.http.routers.clawdbot.middlewares=sanitize-headers"
-#      - "traefik.http.routers.clawdbot.entrypoints=websecure"
-#      - "traefik.http.routers.clawdbot.tls=true"
-#      - "traefik.http.routers.clawdbot.tls.certresolver=letsencrypt"
-#      - "traefik.http.routers.clawdbot.service=clawdbot"
-#      - "traefik.http.services.clawdbot.loadbalancer.server.port=18789"
-#    depends_on:
-#      - traefik
+  clawdbot:
+    container_name: clawdbot
+    image: clawdbot:local
+    command: ["node", "dist/index.js", "gateway"]
+    ports:
+      - "18789:18789"
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.115
+    <<: *common-keys-media
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - HOME=/home/node
+      - TERM=xterm-256color
+      - BROWSER=echo
+    volumes:
+      - ${CONFIG}/clawdbot:/home/node/.clawdbot
+      - ${ROOT}/clawdbot-workspace:/home/node/clawd
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.clawdbot.rule=Host(`clawdbot.${SERVERNAME}`)"
+      - "traefik.http.routers.clawdbot.middlewares=sanitize-headers"
+      - "traefik.http.routers.clawdbot.entrypoints=websecure"
+      - "traefik.http.routers.clawdbot.tls=true"
+      - "traefik.http.routers.clawdbot.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.clawdbot.service=clawdbot"
+      - "traefik.http.services.clawdbot.loadbalancer.server.port=18789"
+    depends_on:
+      - traefik
