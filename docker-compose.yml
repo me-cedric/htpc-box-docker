@@ -201,7 +201,7 @@ services:
     ports:
       - 5055:5055
     volumes:
-      - ${CONFIG}/seer:/app/config
+      - ${CONFIG}/seerr:/app/config
     restart: unless-stopped
     labels:
       - com.centurylinklabs.watchtower.enable=true
