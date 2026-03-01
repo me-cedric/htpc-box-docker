@@ -2,7 +2,7 @@ networks:
   default:
     driver: bridge
   nextcloud:
-    name: nextcould
+    name: nextcloud
     driver: bridge
   npm_proxy:
     name: npm_proxy
@@ -19,6 +19,18 @@ x-common-keys-media: &common-keys-media
   security_opt:
     - "no-new-privileges=true"
 
+x-swaparr-env: &swaparr-env
+  TIME_THRESHOLD: 2h
+  SIZE_THRESHOLD: 25GB
+  CHECK_INTERVAL: 10m
+  STRIKE_THRESHOLD: 3
+  AGGRESSIVE_STRIKES: "true"
+
+x-common-env: &common-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  TZ: ${TZ}
+
 volumes:
   nextcloud_aio_mastercontainer:
     name: nextcloud_aio_mastercontainer
@@ -28,11 +40,13 @@ secrets:
     file: tfa-config.yaml
 
 services:
+
   ############################
   # Traefik
   ############################
   traefik:
     container_name: traefik
+    mem_limit: 256m
     image: traefik:latest
     <<: *common-keys-media
     networks:
@@ -42,14 +56,14 @@ services:
       - 80:80
       - 443:443
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - "./letsencrypt:/letsencrypt"
     environment:
       - TZ=$TZ
     command:
       - --api
       - --api.dashboard=true
-      - --api.insecure=true
+      - --ping=true
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
@@ -83,6 +97,11 @@ services:
       - "traefik.http.middlewares.auth-user.headers.customresponseheaders.Access-Control-Allow-Credentials=true"
       # Admin access only (credentials-admin)
       - "traefik.http.middlewares.auth-admin.headers.customrequestheaders.X-Auth-Group=%{X-Forwarded-Groups}"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       - traefik-forward-auth
 
@@ -91,6 +110,7 @@ services:
   ############################
   traefik-forward-auth:
     container_name: traefik-forward-auth
+    mem_limit: 128m
     image: ghcr.io/italypaleale/traefik-forward-auth:latest
     <<: *common-keys-media
     networks:
@@ -122,6 +142,7 @@ services:
   ############################
   pocketid:
     container_name: pocketid
+    mem_limit: 256m
     image: ghcr.io/pocket-id/pocket-id:latest
     ports:
       - "1411"
@@ -151,10 +172,27 @@ services:
       - traefik
 
   ############################
+  # Watchtower (no UI)
+  ############################
+  watchtower:
+    container_name: watchtower
+    mem_limit: 256m
+    image: nickfedor/watchtower:latest
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges=true"
+    command: --interval 43200
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  ############################
   # Homarr (OIDC login, internal role mapping)
   ############################
   homarr:
     container_name: homarr
+    mem_limit: 512m
     image: ghcr.io/homarr-labs/homarr:latest
     ports:
       - "7575"
@@ -166,10 +204,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${CONFIG}/homarr/appdata:/appdata
     environment:
-      TZ: ${TZ}
-      PUID: ${PUID}
-      PGID: 996
-      SECRET_ENCRYPTION_KEY: ${ENCRYPTIONKEY} # can be generated with `openssl rand -hex 32`
+      <<: *common-env
+      PGID: 996  # overrides default
+      SECRET_ENCRYPTION_KEY: ${ENCRYPTIONKEY}
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
@@ -184,74 +221,13 @@ services:
       - traefik
 
   ############################
-  # Seerr (user group)
-  ############################
-  seerr:
-    image: ghcr.io/seerr-team/seerr:latest
-    init: true
-    container_name: seerr
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - LOG_LEVEL=debug
-      - TZ=${TZ}
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.112
-    ports:
-      - 5055:5055
-    volumes:
-      - ${CONFIG}/seerr:/app/config
-    restart: unless-stopped
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.seerr.rule=Host(`seerr.${SERVERNAME}`)"
-      - "traefik.http.routers.seerr.middlewares=sanitize-headers,forward-auth,auth-user"
-      - "traefik.http.routers.seerr.entrypoints=websecure"
-      - "traefik.http.routers.seerr.tls=true"
-      - "traefik.http.routers.seerr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.seerr.service=seerr"
-      - "traefik.http.services.seerr.loadbalancer.server.port=5055"
-    depends_on:
-      - traefik
-
-  ############################
-  # Truenas behind Nginx (admin group)
-  ############################
-  nginx:
-    image: nginx:latest
-    container_name: truenas
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.101
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.nginx.rule=Host(`truenas.${SERVERNAME}`)"
-      - "traefik.http.routers.nginx.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.nginx.entrypoints=websecure"
-      - "traefik.http.routers.nginx.tls=true"
-      - "traefik.http.routers.nginx.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.nginx.service=nginx"
-      - "traefik.http.services.nginx.loadbalancer.server.port=8081"
-      - "traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=http"
-    depends_on:
-      - traefik
-
-  ############################
   # Portainer (admin group)
   ############################
   portainer:
     image: portainer/portainer-ce:latest
     command: -H unix:///var/run/docker.sock
     container_name: portainer
+    mem_limit: 256m
     <<: *common-keys-media
     networks:
       npm_proxy:
@@ -259,9 +235,7 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+      <<: *common-env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./portainer-data:/data
@@ -279,91 +253,39 @@ services:
       - traefik
 
   ############################
-  # Watchtower (no UI)
+  # Prowlarr (admin group)
   ############################
-  watchtower:
-    container_name: watchtower
-    image: nickfedor/watchtower:latest
-    restart: unless-stopped
-    command: --interval 43200
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-  ############################
-  # NordVPN that exposes Deluge web UI (admin group)
-  ############################
-  nordvpn:
-    container_name: nordvpn
-    image: azinchen/nordvpn:4.1.0
+  prowlarr:
+    image: linuxserver/prowlarr:latest
+    container_name: prowlarr
+    mem_limit: 512m
+    <<: *common-keys-media
+    environment:
+      <<: *common-env
+      DOCKER_MODS: ghcr.io/themepark-dev/theme.park:prowlarr
+      TP_THEME: overseerr
+    ports:
+      - "9696"
     networks:
       npm_proxy:
-        ipv4_address: 192.168.89.160
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    devices:
-      - /dev/net/tun
-    environment:
-      - USER=${VPN_USER}
-      - PASS=${VPN_PWD}
-      - COUNTRY=${VPN_COUNTRY}
-      - GROUP=Standard VPN servers
-      - RANDOM_TOP=10
-      #      - RECREATE_VPN_CRON=5 */3 * * *
-      - NETWORK=${NETWORK}
-      - OPENVPN_OPTS=--mute-replay-warnings
-      - TZ=${TZ}
-    ports:
-      - 8112:8112
-      - 8123:8123
-      - 58846:58846
-      - 58946:58946
-      - 6881:6881
-      - 6881:6881/udp
+        ipv4_address: 192.168.89.172
+    volumes:
+      - ${CONFIG}/prowlarr:/config
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
-      - "traefik.http.routers.deluge.rule=Host(`deluge.${SERVERNAME}`)"
-      - "traefik.http.routers.deluge.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.deluge.entrypoints=websecure"
-      - "traefik.http.routers.deluge.tls=true"
-      - "traefik.http.routers.deluge.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.deluge.service=deluge"
-      - "traefik.http.services.deluge.loadbalancer.server.port=8112"
-      - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.${SERVERNAME}`)"
-      - "traefik.http.routers.qbittorrent.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.qbittorrent.entrypoints=websecure"
-      - "traefik.http.routers.qbittorrent.tls=true"
-      - "traefik.http.routers.qbittorrent.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.qbittorrent.service=qbittorrent"
-      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8123"
+      - "traefik.http.routers.prowlarr.rule=Host(`prowlarr.${SERVERNAME}`)"
+      - "traefik.http.routers.prowlarr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.prowlarr.entrypoints=websecure"
+      - "traefik.http.routers.prowlarr.tls=true"
+      - "traefik.http.routers.prowlarr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.prowlarr.service=prowlarr"
+      - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"
     depends_on:
       - traefik
-
-  ############################
-  # Qbittorrent (behind NordVPN)
-  ############################
-  qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
-    container_name: qbittorrent
-    restart: unless-stopped
-    network_mode: service:nordvpn
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:qbittorrent
-      - TP_THEME=dracula
-      - WEBUI_PORT=8123
-      - TORRENTING_PORT=6881
-    volumes:
-      - ${CONFIG}/qbittorrent:/config
-      - ${ROOT}/downloads:/downloads
-    depends_on:
-      - traefik
-      - nordvpn
+      - radarr
+      - sonarr
+      - flaresolverr
 
   ############################
   # Radarr (admin group)
@@ -371,6 +293,7 @@ services:
   radarr:
     image: linuxserver/radarr:latest
     container_name: radarr
+    mem_limit: 512m
     ports:
       - "7878"
     <<: *common-keys-media
@@ -378,13 +301,10 @@ services:
       npm_proxy:
         ipv4_address: 192.168.89.104
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:radarr
-      - TP_THEME=overseerr
+      <<: *common-env
+      DOCKER_MODS: ghcr.io/themepark-dev/theme.park:radarr
+      TP_THEME: overseerr
     volumes:
-      - /etc/localtime:/etc/localtime:ro
       - ${CONFIG}/radarr:/config
       - ${ROOT}/movies:/movies
       - ${ROOT}/downloads:/downloads
@@ -398,6 +318,12 @@ services:
       - "traefik.http.routers.radarr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.radarr.service=radarr"
       - "traefik.http.services.radarr.loadbalancer.server.port=7878"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
       - traefik
 
@@ -407,20 +333,18 @@ services:
   sonarr:
     image: linuxserver/sonarr:latest
     container_name: sonarr
+    mem_limit: 512m
     ports:
       - "8989"
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:sonarr
-      - TP_THEME=overseerr
+      <<: *common-env
+      DOCKER_MODS: ghcr.io/themepark-dev/theme.park:sonarr
+      TP_THEME: overseerr
     <<: *common-keys-media
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.105
     volumes:
-      - /etc/localtime:/etc/localtime:ro
       - ${CONFIG}/sonarr:/config
       - ${ROOT}/tv:/tv
       - ${ROOT}/downloads:/downloads
@@ -434,42 +358,178 @@ services:
       - "traefik.http.routers.sonarr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.sonarr.service=sonarr"
       - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
       - traefik
 
+  ############################
+  # Bazarr (admin group)
+  ############################
+  bazarr:
+    image: linuxserver/bazarr:latest
+    container_name: bazarr
+    mem_limit: 512m
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.110
+    ports:
+      - "6767"
+    environment:
+      <<: *common-env
+      DOCKER_MODS: ghcr.io/themepark-dev/theme.park:bazarr
+      TP_THEME: overseerr
+    volumes:
+      - ${CONFIG}/bazarr:/config
+      - ${ROOT}/movies:/movies
+      - ${ROOT}/tv:/tv
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.bazarr.rule=Host(`bazarr.${SERVERNAME}`)"
+      - "traefik.http.routers.bazarr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.bazarr.entrypoints=websecure"
+      - "traefik.http.routers.bazarr.tls=true"
+      - "traefik.http.routers.bazarr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.bazarr.service=bazarr"
+      - "traefik.http.services.bazarr.loadbalancer.server.port=6767"
+    depends_on:
+      - traefik
+
+  ############################
+  # Flaresolverr (admin group)
+  ############################
+  flaresolverr:
+    container_name: flaresolverr
+    mem_limit: 512m
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    <<: *common-keys-media
+    ports:
+      - "8191"
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.166
+    environment:
+      <<: *common-env
+    volumes:
+      - ${CONFIG}/flaresolverr:/config
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.flaresolverr.rule=Host(`flaresolverr.${SERVERNAME}`)"
+      - "traefik.http.routers.flaresolverr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.flaresolverr.entrypoints=websecure"
+      - "traefik.http.routers.flaresolverr.tls=true"
+      - "traefik.http.routers.flaresolverr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.flaresolverr.service=flaresolverr"
+      - "traefik.http.services.flaresolverr.loadbalancer.server.port=8191"
+    depends_on:
+      - traefik
+
+  ############################
+  # Swaparr - Stalled download manager
+  ############################
   swaparr-radarr:
     image: ghcr.io/thijmengthn/swaparr:latest
     container_name: swaparr-radarr
+    mem_limit: 128m
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.117
-    restart: always
+    restart: unless-stopped
     environment:
-      - BASEURL=http://192.168.89.104:7878 # IP or FQDN           (Required)
-      - APIKEY=${RADARR_API_KEY} # Radarr API Key       (Required)
-      - PLATFORM=radarr # "radarr", "sonarr".. (Optional) default: radarr
-      - TIME_THRESHOLD=2h # 1d, 6h, 30m, etc..   (Optional) default: 2h
-      - SIZE_THRESHOLD=25GB # 1TB, 1GB, 1MB, etc.. (Optional) default: 25GB
-      - CHECK_INTERVAL=10m # 1d, 6h, 30m, etc..   (Optional) default: 10m
-      - STRIKE_THRESHOLD=3 # Positive number      (Optional) default: 3
-      - AGGRESSIVE_STRIKES=true # Boolean              (Optional) default: false
+      <<: *swaparr-env
+      BASEURL: http://192.168.89.104:7878
+      APIKEY: ${RADARR_API_KEY}
+      PLATFORM: radarr
 
   swaparr-sonarr:
     image: ghcr.io/thijmengthn/swaparr:latest
     container_name: swaparr-sonarr
+    mem_limit: 128m
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.118
-    restart: always
+    restart: unless-stopped
     environment:
-      - BASEURL=http://192.168.89.105:8989 # IP or FQDN           (Required)
-      - APIKEY=${SONARR_API_KEY} # Sonarr API Key       (Required)
-      - PLATFORM=sonarr # "radarr", "sonarr".. (Optional) default: radarr
-      - TIME_THRESHOLD=2h # 1d, 6h, 30m, etc..   (Optional) default: 2h
-      - SIZE_THRESHOLD=25GB # 1TB, 1GB, 1MB, etc.. (Optional) default: 25GB
-      - CHECK_INTERVAL=10m # 1d, 6h, 30m, etc..   (Optional) default: 10m
-      - STRIKE_THRESHOLD=3 # Positive number      (Optional) default: 3
-      - AGGRESSIVE_STRIKES=true # Boolean              (Optional) default: false
+      <<: *swaparr-env
+      BASEURL: http://192.168.89.105:8989
+      APIKEY: ${SONARR_API_KEY}
+      PLATFORM: sonarr
+
+  ############################
+  # Gluetun VPN (NordVPN via OpenVPN)
+  ############################
+  gluetun:
+    container_name: gluetun
+    mem_limit: 256m
+    image: qmcgaw/gluetun:latest
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.160
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=nordvpn
+      - VPN_TYPE=openvpn
+      - OPENVPN_USER=${VPN_USER}
+      - OPENVPN_PASSWORD=${VPN_PWD}
+      - SERVER_COUNTRIES=${VPN_COUNTRY}
+      - FIREWALL_OUTBOUND_SUBNETS=${NETWORK}
+      - TZ=${TZ}
+    ports:
+      - 8123:8123 # qBittorrent WebUI
+      - 6881:6881 # qBittorrent torrenting
+      - 6881:6881/udp
+    healthcheck:
+      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.${SERVERNAME}`)"
+      - "traefik.http.routers.qbittorrent.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.qbittorrent.entrypoints=websecure"
+      - "traefik.http.routers.qbittorrent.tls=true"
+      - "traefik.http.routers.qbittorrent.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.qbittorrent.service=qbittorrent"
+      - "traefik.http.services.qbittorrent.loadbalancer.server.port=8123"
+    depends_on:
+      - traefik
+
+  ############################
+  # qBittorrent (behind Gluetun VPN)
+  ############################
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    mem_limit: 1g
+    restart: unless-stopped
+    network_mode: service:gluetun
+    security_opt:
+      - "no-new-privileges=true"
+    environment:
+      <<: *common-env
+      DOCKER_MODS: ghcr.io/themepark-dev/theme.park:qbittorrent
+      TP_THEME: dracula
+      WEBUI_PORT: 8123
+      TORRENTING_PORT: 6881
+    volumes:
+      - ${CONFIG}/qbittorrent:/config
+      - ${ROOT}/downloads:/downloads
+    depends_on:
+      - traefik
+      - gluetun
 
   ############################
   # Plex (open access)
@@ -477,7 +537,8 @@ services:
   plex-server:
     image: linuxserver/plex:latest
     container_name: plex-server
-    restart: unless-stopped
+    mem_limit: 4g
+    <<: *common-keys-media
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.106
@@ -503,14 +564,10 @@ services:
               count: 1
               capabilities: [gpu]
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - VERSION=docker
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
-      # Only on first boot
-      # - PLEX_CLAIM=${PLEX_CLAIM}
+      <<: *common-env
+      VERSION: docker
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
     volumes:
       - ${CONFIG}/plex/library:/root/Library
       - ${CONFIG}/plex/db:/config
@@ -518,7 +575,7 @@ services:
       - ${ROOT}/tv:/data/tvshows
       - ${ROOT}/movies:/data/movies
     labels:
-      - com.centurylinklabs.watchtower.enable=true- "traefik.enable=true"
+      - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.plex-server.rule=Host(`plex.${SERVERNAME}`)"
       - "traefik.http.routers.plex-server.entrypoints=websecure"
@@ -526,6 +583,12 @@ services:
       - "traefik.http.routers.plex-server.tls.certresolver=letsencrypt"
       - "traefik.http.routers.plex-server.service=plex-server"
       - "traefik.http.services.plex-server.loadbalancer.server.port=32400"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:32400/identity"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
       - traefik
 
@@ -535,6 +598,9 @@ services:
   scheduler:
     image: mcuadros/ofelia:latest
     container_name: scheduler
+    mem_limit: 128m
+    security_opt:
+      - "no-new-privileges=true"
     depends_on:
       - plextraktsync
       - plex-server
@@ -556,6 +622,9 @@ services:
     image: ghcr.io/taxel/plextraktsync
     command: sync
     container_name: plextraktsync
+    mem_limit: 256m
+    security_opt:
+      - "no-new-privileges=true"
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.108
@@ -563,270 +632,20 @@ services:
     volumes:
       - ${CONFIG}/plextraktsync:/app/config
     environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Europe/Paris
+      <<: *common-env
     labels:
       - com.centurylinklabs.watchtower.enable=true
     depends_on:
       - plex-server
 
   ############################
-  # Bazarr (admin group)
-  ############################
-  bazarr:
-    image: linuxserver/bazarr:latest
-    container_name: bazarr
-    <<: *common-keys-media
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.110
-    ports:
-      - "6767"
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:bazarr
-      - TP_THEME=overseerr
-    volumes:
-      - ${CONFIG}/bazarr:/config
-      - ${ROOT}/movies:/movies
-      - ${ROOT}/tv:/tv
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.bazarr.rule=Host(`bazarr.${SERVERNAME}`)"
-      - "traefik.http.routers.bazarr.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.bazarr.entrypoints=websecure"
-      - "traefik.http.routers.bazarr.tls=true"
-      - "traefik.http.routers.bazarr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.bazarr.service=bazarr"
-      - "traefik.http.services.bazarr.loadbalancer.server.port=6767"
-    depends_on:
-      - traefik
-
-  ############################
-  # Flaresolverr (admin group)
-  ############################
-  flaresolverr:
-    container_name: flaresolverr
-    image: ghcr.io/flaresolverr/flaresolverr:latest
-    restart: unless-stopped
-    <<: *common-keys-media
-    ports:
-      - "8191"
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.166
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    volumes:
-      - ${CONFIG}/flaresolverr:/config
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.flaresolverr.rule=Host(`flaresolverr.${SERVERNAME}`)"
-      - "traefik.http.routers.flaresolverr.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.flaresolverr.entrypoints=websecure"
-      - "traefik.http.routers.flaresolverr.tls=true"
-      - "traefik.http.routers.flaresolverr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.flaresolverr.service=flaresolverr"
-      - "traefik.http.services.flaresolverr.loadbalancer.server.port=8191"
-    depends_on:
-      - traefik
-
-  ############################
-  # Duplicati (admin group)
-  ############################
-  duplicati:
-    container_name: duplicati
-    image: linuxserver/duplicati:latest
-    restart: unless-stopped
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.168
-    ports:
-      - "8200"
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:duplicati
-      - TP_THEME=overseerr
-      - DUPLICATI__WEBSERVICE_PASSWORD=${DUPLICATI__WEBSERVICE_PASSWORD}
-    volumes:
-      - ${CONFIG}/duplicati:/config
-      - ${CONFIG}:/source
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.duplicati.rule=Host(`duplicati.${SERVERNAME}`)"
-      - "traefik.http.routers.duplicati.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.duplicati.entrypoints=websecure"
-      - "traefik.http.routers.duplicati.tls=true"
-      - "traefik.http.routers.duplicati.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.duplicati.service=duplicati"
-      - "traefik.http.services.duplicati.loadbalancer.server.port=8200"
-    depends_on:
-      - traefik
-
-  ############################
-  # MariaDB for Nextcloud (not exposed)
-  ############################
-  database:
-    image: mariadb:10
-    container_name: database
-    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
-    restart: unless-stopped
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
-      - MYSQL_USER=${MYSQL_USER}
-    networks:
-      - nextcloud
-    volumes:
-      - ${CONFIG}/mariadb:/var/lib/mysql
-
-  ############################
-  # Redis for Nextcloud (not exposed)
-  ############################
-  redis:
-    image: redis:alpine
-    container_name: redis
-    networks:
-      nextcloud:
-    restart: unless-stopped
-
-  ############################
-  # Nextcloud (admin group)
-  ############################
-  nextcloud:
-    image: nextcloud:latest
-    container_name: nextcloud
-    restart: unless-stopped
-    depends_on:
-      - database
-      - redis
-      - traefik
-    hostname: nextcloud.${SERVERNAME}
-    volumes:
-      - ${CONFIG}/nextcloud:/var/www/html
-      - ${ROOT}:/nas-share
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.170
-      nextcloud:
-    environment:
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_HOST=database
-      - REDIS_HOST=redis
-      - "NEXTCLOUD_TRUSTED_DOMAINS=localhost 0.0.0.0 192.168.89.0 ${SERVERNAME} organizr.${SERVERNAME} nextcloud.${SERVERNAME}"
-      - TRUSTED_PROXIES=192.168.89.0/24
-      - OVERWRITEPROTOCOL=https
-    ports:
-      - 8282:80
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.${SERVERNAME}`)"
-      - "traefik.http.routers.nextcloud.middlewares=auth-admin@docker,sanitize-headers,forward-auth,nextcloud-dav,nextcloud-headers"
-      - "traefik.http.routers.nextcloud.entrypoints=websecure"
-      - "traefik.http.routers.nextcloud.tls=true"
-      - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.nextcloud.service=nextcloud"
-      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.regex=^/.well-known/ca(l|rd)dav"
-      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.replacement=/remote.php/dav/"
-      - "traefik.http.middlewares.nextcloud-headers.headers.stsSeconds=15552000"
-      - "traefik.http.middlewares.nextcloud-headers.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.nextcloud-headers.headers.stsPreload=true"
-      - "traefik.http.middlewares.nextcloud-headers.headers.forceSTSHeader=true"
-      - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
-      - "traefik.docker.network=npm_proxy"
-
-  ############################
-  # Kavita (admin group)
-  ############################
-  kavita:
-    image: jvmilazz0/kavita:latest
-    container_name: kavita
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.171
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    volumes:
-      - ${CONFIG}/kavita:/kavita/config
-      - ${ROOT}/ebooks/comics:/comics
-      - ${ROOT}/ebooks/bd:/bd
-      - ${ROOT}/ebooks/books:/books
-      - ${ROOT}/ebooks/manga:/manga
-    ports:
-      - "5000"
-    restart: unless-stopped
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.kavita.rule=Host(`kavita.${SERVERNAME}`)"
-      - "traefik.http.routers.kavita.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.kavita.entrypoints=websecure"
-      - "traefik.http.routers.kavita.tls=true"
-      - "traefik.http.routers.kavita.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.kavita.service=kavita"
-      - "traefik.http.services.kavita.loadbalancer.server.port=5000"
-    depends_on:
-      - traefik
-
-  ############################
-  # Prowlarr (admin group)
-  ############################
-  prowlarr:
-    image: linuxserver/prowlarr:latest
-    container_name: prowlarr
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - DOCKER_MODS=ghcr.io/themepark-dev/theme.park:prowlarr
-      - TP_THEME=overseerr
-    ports:
-      - "9696"
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.172
-    volumes:
-      - ${CONFIG}/prowlarr:/config
-    restart: unless-stopped
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-      - "traefik.enable=true"
-      - "traefik.http.routers.prowlarr.rule=Host(`prowlarr.${SERVERNAME}`)"
-      - "traefik.http.routers.prowlarr.middlewares=sanitize-headers,forward-auth,auth-admin"
-      - "traefik.http.routers.prowlarr.entrypoints=websecure"
-      - "traefik.http.routers.prowlarr.tls=true"
-      - "traefik.http.routers.prowlarr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.prowlarr.service=prowlarr"
-      - "traefik.http.services.prowlarr.loadbalancer.server.port=9696"
-    depends_on:
-      - traefik
-      - radarr
-      - sonarr
-      - flaresolverr
-
-  ############################
   # Tdarr (admin group)
   ############################
   tdarr:
     container_name: tdarr
+    mem_limit: 4g
     image: ghcr.io/haveagitgat/tdarr:latest
-    restart: unless-stopped
+    <<: *common-keys-media
     ports:
       - "8265" # webUI port
       - "8266" # server port
@@ -834,19 +653,17 @@ services:
       npm_proxy:
         ipv4_address: 192.168.89.173
     environment:
-      - TZ=${TZ}
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - UMASK_SET=002
-      - serverIP=0.0.0.0
-      - serverPort=8266
-      - webUIPort=8265
-      - internalNode=true
-      - inContainer=true
-      - ffmpegVersion=6
-      - nodeName=TdarrInternalNode
-      - NVIDIA_DRIVER_CAPABILITIES=all
-      - NVIDIA_VISIBLE_DEVICES=all
+      <<: *common-env
+      UMASK_SET: "002"
+      serverIP: 0.0.0.0
+      serverPort: 8266
+      webUIPort: 8265
+      internalNode: "true"
+      inContainer: "true"
+      ffmpegVersion: 6
+      nodeName: TdarrInternalNode
+      NVIDIA_DRIVER_CAPABILITIES: all
+      NVIDIA_VISIBLE_DEVICES: all
     volumes:
       - ${CONFIG}/tdarr/server:/app/server
       - ${CONFIG}/tdarr/configs:/app/configs
@@ -873,5 +690,236 @@ services:
       - "traefik.http.routers.tdarr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.tdarr.service=tdarr"
       - "traefik.http.services.tdarr.loadbalancer.server.port=8265"
+    depends_on:
+      - traefik
+
+  ############################
+  # Kavita (admin group)
+  ############################
+  kavita:
+    image: jvmilazz0/kavita:latest
+    container_name: kavita
+    mem_limit: 512m
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.171
+    environment:
+      <<: *common-env
+    volumes:
+      - ${CONFIG}/kavita:/kavita/config
+      - ${ROOT}/ebooks/comics:/comics
+      - ${ROOT}/ebooks/bd:/bd
+      - ${ROOT}/ebooks/books:/books
+      - ${ROOT}/ebooks/manga:/manga
+    ports:
+      - "5000"
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.kavita.rule=Host(`kavita.${SERVERNAME}`)"
+      - "traefik.http.routers.kavita.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.kavita.entrypoints=websecure"
+      - "traefik.http.routers.kavita.tls=true"
+      - "traefik.http.routers.kavita.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.kavita.service=kavita"
+      - "traefik.http.services.kavita.loadbalancer.server.port=5000"
+    depends_on:
+      - traefik
+
+  ############################
+  # Seerr (user group)
+  ############################
+  seerr:
+    image: ghcr.io/seerr-team/seerr:latest
+    init: true
+    container_name: seerr
+    mem_limit: 512m
+    <<: *common-keys-media
+    environment:
+      <<: *common-env
+      LOG_LEVEL: info
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.112
+    ports:
+      - 5055:5055
+    volumes:
+      - ${CONFIG}/seerr:/app/config
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.seerr.rule=Host(`seerr.${SERVERNAME}`)"
+      - "traefik.http.routers.seerr.middlewares=sanitize-headers,forward-auth,auth-user"
+      - "traefik.http.routers.seerr.entrypoints=websecure"
+      - "traefik.http.routers.seerr.tls=true"
+      - "traefik.http.routers.seerr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.seerr.service=seerr"
+      - "traefik.http.services.seerr.loadbalancer.server.port=5055"
+    depends_on:
+      - traefik
+
+  ############################
+  # MariaDB for Nextcloud (not exposed)
+  ############################
+  database:
+    image: mariadb:10
+    container_name: database
+    mem_limit: 512m
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges=true"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - nextcloud
+    volumes:
+      - ${CONFIG}/mariadb:/var/lib/mysql
+
+  ############################
+  # Redis for Nextcloud (not exposed)
+  ############################
+  redis:
+    image: redis:alpine
+    container_name: redis
+    mem_limit: 128m
+    security_opt:
+      - "no-new-privileges=true"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      nextcloud:
+    restart: unless-stopped
+
+  ############################
+  # Nextcloud (admin group)
+  ############################
+  nextcloud:
+    image: nextcloud:latest
+    container_name: nextcloud
+    mem_limit: 1g
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges=true"
+    depends_on:
+      - database
+      - redis
+      - traefik
+    hostname: nextcloud.${SERVERNAME}
+    volumes:
+      - ${CONFIG}/nextcloud:/var/www/html
+      - ${ROOT}:/nas-share
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.170
+      nextcloud:
+    environment:
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_HOST=database
+      - REDIS_HOST=redis
+      - "NEXTCLOUD_TRUSTED_DOMAINS=localhost 0.0.0.0 192.168.89.0 ${SERVERNAME} homarr.${SERVERNAME} nextcloud.${SERVERNAME}"
+      - TRUSTED_PROXIES=192.168.89.0/24
+      - OVERWRITEPROTOCOL=https
+    ports:
+      - 8282:80
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.${SERVERNAME}`)"
+      - "traefik.http.routers.nextcloud.middlewares=auth-admin@docker,sanitize-headers,forward-auth,nextcloud-dav,nextcloud-headers"
+      - "traefik.http.routers.nextcloud.entrypoints=websecure"
+      - "traefik.http.routers.nextcloud.tls=true"
+      - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.nextcloud.service=nextcloud"
+      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.regex=^/.well-known/ca(l|rd)dav"
+      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.replacement=/remote.php/dav/"
+      - "traefik.http.middlewares.nextcloud-headers.headers.stsSeconds=15552000"
+      - "traefik.http.middlewares.nextcloud-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.nextcloud-headers.headers.stsPreload=true"
+      - "traefik.http.middlewares.nextcloud-headers.headers.forceSTSHeader=true"
+      - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
+      - "traefik.docker.network=npm_proxy"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/status.php"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  ############################
+  # Duplicati (admin group)
+  ############################
+  duplicati:
+    container_name: duplicati
+    mem_limit: 1g
+    image: linuxserver/duplicati:latest
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.168
+    ports:
+      - "8200"
+    environment:
+      <<: *common-env
+      DOCKER_MODS: ghcr.io/themepark-dev/theme.park:duplicati
+      TP_THEME: overseerr
+      DUPLICATI__WEBSERVICE_PASSWORD: ${DUPLICATI__WEBSERVICE_PASSWORD}
+    volumes:
+      - ${CONFIG}/duplicati:/config
+      - ${CONFIG}:/source
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.duplicati.rule=Host(`duplicati.${SERVERNAME}`)"
+      - "traefik.http.routers.duplicati.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.duplicati.entrypoints=websecure"
+      - "traefik.http.routers.duplicati.tls=true"
+      - "traefik.http.routers.duplicati.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.duplicati.service=duplicati"
+      - "traefik.http.services.duplicati.loadbalancer.server.port=8200"
+    depends_on:
+      - traefik
+
+  ############################
+  # Truenas behind Nginx (admin group)
+  ############################
+  nginx:
+    image: nginx:latest
+    container_name: truenas
+    mem_limit: 128m
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.101
+    environment:
+      <<: *common-env
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.nginx.rule=Host(`truenas.${SERVERNAME}`)"
+      - "traefik.http.routers.nginx.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.nginx.entrypoints=websecure"
+      - "traefik.http.routers.nginx.tls=true"
+      - "traefik.http.routers.nginx.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.nginx.service=nginx"
+      - "traefik.http.services.nginx.loadbalancer.server.port=8081"
+      - "traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=http"
     depends_on:
       - traefik
