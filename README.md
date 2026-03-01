@@ -35,7 +35,7 @@
 
 #### Download & VPN
 - [🔒 NordVPN](#-nordvpn)
-- [📥 Deluge](#-deluge-download-client)
+- [📥 qBittorrent](#-qbittorrent-download-client)
 - [🔧 FlareSolverr](#-flaresolverr)
 
 #### Media Streaming
@@ -45,7 +45,7 @@
 
 #### User Interfaces
 - [📊 Homarr (Dashboard)](#-homarr-dashboard)
-- [🎬 Overseerr (Requests)](#-overseerr-media-requests)
+- [🎬 Seerr (Requests)](#-seerr-media-requests)
 
 #### Utilities
 - [📖 Kavita (Ebooks/Comics)](#-kavita-ebookcomic-server)
@@ -54,9 +54,6 @@
 - [🐳 Portainer](#-portainer-container-management)
 - [🔄 Watchtower](#-watchtower-auto-updates)
 - [💾 TrueNAS Integration](#-truenas-integration)
-
-#### AI Assistant
-- [🤖 Clawdbot](#-clawdbot-ai-assistant)
 
 ### System Configuration
 - [💾 Storage Setup](#-storage-setup)
@@ -70,9 +67,8 @@
 - [🔗 Service Integration](#-service-integration-guide)
   - [Media Pipeline Setup](#-complete-media-pipeline-setup)
   - [Plex Integration](#-plex-integration)
-  - [Request System Setup](#-overseerr-request-system)
+  - [Request System Setup](#-seerr-request-system)
 - [⚙️ Advanced Configuration](#️-configuration)
-- [🤖 Adding Clawdbot](#-adding-clawdbot)
 
 ### Reference
 - [💻 Useful Commands](#-useful-commands)
@@ -89,25 +85,24 @@ This stack provides a **complete automated media server** with:
 ### 🎯 Core Features
 - 🌐 **Reverse Proxy**: Traefik with automatic HTTPS (Let's Encrypt)
 - 🎥 **Media Automation**: Radarr, Sonarr, Prowlarr for automated downloads
-- 📥 **Secure Downloads**: Deluge behind NordVPN
+- 📥 **Secure Downloads**: qBittorrent behind NordVPN
 - 🎬 **Streaming**: Plex with hardware transcoding
 - 📝 **Subtitles**: Bazarr for 40+ languages
 - 📚 **Books & Comics**: Kavita reader
-- 🎯 **User Requests**: Overseerr for family/friends
-- 🤖 **AI Assistant**: Clawdbot for automation
+- 🎯 **User Requests**: Seerr for family/friends
 - 📊 **Dashboard**: Homarr for monitoring
 - 🔄 **Auto-Updates**: Watchtower
 - 💾 **Backups**: Duplicati with encryption
 
 ### 🔄 Media Flow
 ```
-User Request (Overseerr)
+User Request (Seerr)
     ↓
 Quality Check (Radarr/Sonarr)
     ↓
 Search Indexers (Prowlarr)
     ↓
-Download via VPN (Deluge + NordVPN)
+Download via VPN (qBittorrent + NordVPN)
     ↓
 Organize & Rename (Radarr/Sonarr)
     ↓
@@ -195,17 +190,17 @@ SERVERNAME=yourdomain.com
 ##############################################
 # VPN Configuration
 ##############################################
-NORDVPN_USER=your_email@example.com
-NORDVPN_PASS=your_nordvpn_password
-NORDVPN_COUNTRY=US  # or CH, UK, etc.
+VPN_USER=your_email@example.com
+VPN_PWD=your_nordvpn_password
+VPN_COUNTRY=US  # or CH, UK, etc.
 NORDVPN_PROTOCOL=nordlynx  # fastest option
 
 ##############################################
 # Database Configuration
 ##############################################
-POSTGRES_PASSWORD=generate_secure_password_here
-POSTGRES_DB=nextcloud
-POSTGRES_USER=nextcloud
+MYSQL_PASSWORD=generate_secure_password_here
+MYSQL_DATABASE=nextcloud
+MYSQL_USER=nextcloud
 
 ##############################################
 # Optional: Plex Claim Token
@@ -278,7 +273,6 @@ This setup assumes a dedicated storage location for media and configuration:
 ├── radarr/
 ├── sonarr/
 ├── plex-server/
-├── clawdbot/
 └── ...
 ```
 
@@ -442,11 +436,6 @@ Add these entries at the end:
 # | +---------------------- Minute (0-59)
 
 ##############################################
-# Daily Configuration Backup (5:30 AM)
-##############################################
-30 5  * * *  root  rsync -aHAX /config/ /mnt/nas-share/backup-htpc-config/
-
-##############################################
 # Daily Docker Update & Cleanup (6:00 AM)
 ##############################################
 0  6  * * *  root  bash -c 'cd /home/htpc/htpc-box-docker && docker compose down && docker compose pull --ignore-pull-failures && docker compose up -d --remove-orphans && docker image prune -a -f'
@@ -589,29 +578,102 @@ docker compose up -d
 
 ## 📦 Services Overview
 
+### 🏗️ Stack Architecture
+
+```mermaid
+graph TD
+    subgraph "Public Internet"
+        User((User))
+    end
+
+    subgraph "HTPC Stack (Docker)"
+        Traefik[🌐 Traefik Proxy]
+        Auth[🔐 PocketID / Auth]
+        Dashboard[📊 Homarr Dashboard]
+        
+        subgraph "Media Discovery & Requests"
+            Seerr[🎬 Seerr Requests]
+        end
+
+        subgraph "Media Pipeline"
+            Prowlarr[🔍 Prowlarr Indexers]
+            Radarr[🎥 Radarr Movies]
+            Sonarr[📺 Sonarr TV]
+            Bazarr[📝 Bazarr Subtitles]
+            Tdarr[🎞️ Tdarr Transcoding]
+        end
+
+        subgraph "Download Client"
+            NordVPN[🔒 NordVPN]
+            qBittorrent[📥 qBittorrent]
+            FlareSolverr[🔧 FlareSolverr]
+        end
+
+        subgraph "Media Hosting"
+            Plex[🎬 Plex Server]
+            Kavita[📖 Kavita Reader]
+        end
+
+        subgraph "Utilities"
+            Portainer[🐳 Portainer]
+            Nextcloud[☁️ Nextcloud]
+            Duplicati[💾 Duplicati]
+        end
+    end
+
+    User --> Traefik
+    Traefik --> Dashboard
+    Traefik --> Seerr
+    Traefik --> Auth
+    
+    Seerr --> Radarr
+    Seerr --> Sonarr
+    
+    Radarr --> Prowlarr
+    Sonarr --> Prowlarr
+    
+    Radarr --> qBittorrent
+    Sonarr --> qBittorrent
+    
+    qBittorrent -.-> NordVPN
+    Prowlarr -.-> FlareSolverr
+    
+    Bazarr --> Radarr
+    Bazarr --> Sonarr
+    
+    Radarr --> Plex
+    Sonarr --> Plex
+    
+    Plex -.-> Tdarr
+```
+
+
 | Service | Purpose | Port | URL |
 |---------|---------|------|-----|
 | 🌐 Traefik | Reverse Proxy | 80, 443 | `traefik.${SERVERNAME}` |
 | 🔐 Forward Auth | SSO Authentication | - | `auth.${SERVERNAME}` |
 | 📊 Homarr | Dashboard | - | `homarr.${SERVERNAME}` |
-| 🎬 Overseerr | Media Requests | - | `overseerr.${SERVERNAME}` |
+| 🎬 Seerr | Media Requests | - | `seerr.${SERVERNAME}` |
 | 🎥 Radarr | Movie Management | - | `radarr.${SERVERNAME}` |
 | 📺 Sonarr | TV Management | - | `sonarr.${SERVERNAME}` |
 | 🔍 Prowlarr | Indexer Manager | - | `prowlarr.${SERVERNAME}` |
 | 📝 Bazarr | Subtitles | - | `bazarr.${SERVERNAME}` |
 | 🔒 NordVPN | VPN Tunnel | - | (internal) |
-| 📥 Deluge | Download Client | - | `deluge.${SERVERNAME}` |
+| 📥 qBittorrent | Download Client | - | `qbittorrent.${SERVERNAME}` |
 | 🎬 Plex | Media Server | 32400 | `http://server-ip:32400/web` |
 | 🎞️ Tdarr | Transcoding | - | `tdarr.${SERVERNAME}` |
 | 📖 Kavita | Ebook/Comic Reader | - | `kavita.${SERVERNAME}` |
+| �� Swaparr | Stalled Manager | - | Background |
 | ☁️ Nextcloud | File Sync | - | `nextcloud.${SERVERNAME}` |
 | 💾 Duplicati | Backups | - | `duplicati.${SERVERNAME}` |
 | 🐳 Portainer | Container Manager | - | `portainer.${SERVERNAME}` |
-| 🤖 Clawdbot | AI Assistant | - | `clawdbot.${SERVERNAME}` |
 
 ---
 
 ## 🌐 Traefik (Reverse Proxy)
+
+![Traefik Dashboard](img/traefik.png)
+*The Traefik dashboard provides real-time visibility into your routing and service health.*
 
 **Container**: `traefik`  
 **Ports**: 80 (HTTP), 443 (HTTPS)  
@@ -671,8 +733,11 @@ docker compose up -d traefik-forward-auth
 
 ## 🪪 PocketID
 
+![PocketID Login](img/pocketid.png)
+*Self-hosted identity provider and authentication gateway for your stack.*
+
 **Container**: `pocketid`  
-**Web UI**: `https://pocketid.${SERVERNAME}`
+**Web UI**: `https://auth.${SERVERNAME}`
 
 ### 📖 About
 Self-hosted identity provider for complete control over authentication.
@@ -686,6 +751,9 @@ Self-hosted identity provider for complete control over authentication.
 ---
 
 ## 📊 Homarr (Dashboard)
+
+![Homarr Dashboard](img/homarr.png)
+*A sleek, customizable dashboard to quickly access and monitor all your services.*
 
 **Container**: `homarr`  
 **Web UI**: `https://homarr.${SERVERNAME}`
@@ -718,10 +786,13 @@ Beautiful, customizable dashboard for all your services with integrations and mo
 
 ---
 
-## 🎬 Overseerr (Media Requests)
+## 🎬 Seerr (Media Requests)
 
-**Container**: `overseerr`  
-**Web UI**: `https://overseerr.${SERVERNAME}`
+![Seerr Requests](img/seerr.png)
+*Beautiful request and discovery platform for Plex.*
+
+**Container**: `seerr`  
+**Web UI**: `https://seerr.${SERVERNAME}`
 
 ### 📖 About
 Beautiful request and discovery platform for Plex. Perfect for letting family/friends request content.
@@ -729,9 +800,9 @@ Beautiful request and discovery platform for Plex. Perfect for letting family/fr
 ### 🔧 Initial Setup
 
 #### Step 1: Connect to Plex
-1. Access Overseerr web UI
+1. Access Seerr web UI
 2. Click "Sign in with Plex"
-3. Authorize Overseerr
+3. Authorize Seerr
 
 #### Step 2: Configure Plex Libraries
 1. Select your Plex server
@@ -784,6 +855,9 @@ Beautiful request and discovery platform for Plex. Perfect for letting family/fr
 ---
 
 ## 🔍 Prowlarr (Indexer Manager)
+
+![Prowlarr Dashboard](img/prowlarr.png)
+*Indexer manager for integrating Torrent and Usenet search.*
 
 **Container**: `prowlarr`  
 **Web UI**: `https://prowlarr.${SERVERNAME}`
@@ -842,6 +916,9 @@ Centralized indexer management. Add indexers once, sync to all *arr apps automat
 
 ## 🎥 Radarr (Movie Management)
 
+![Radarr Dashboard](img/radarr.png)
+*Automated movie download and collection management.*
+
 **Container**: `radarr`  
 **Web UI**: `https://radarr.${SERVERNAME}`
 
@@ -850,13 +927,13 @@ Automated movie downloading, renaming, and organization.
 
 ### 🔧 Setup Steps
 
-#### Step 1: Add Download Client (Deluge)
-1. Settings → Download Clients → Add → Deluge
+#### Step 1: Add Download Client (qBittorrent)
+1. Settings → Download Clients → Add → qBittorrent
 2. Configure:
-   - **Name**: Deluge
-   - **Host**: `deluge` (container name)
+   - **Name**: qBittorrent
+   - **Host**: `qbittorrent` (container name)
    - **Port**: `8112`
-   - **Password**: `deluge` (change in Deluge first!)
+   - **Password**: `qbittorrent` (change in qBittorrent first!)
    - **Category**: `radarr-movies`
 3. Test and Save
 
@@ -885,7 +962,7 @@ Automated movie downloading, renaming, and organization.
 
 ### 💡 Workflow
 1. Movie added → searches indexers
-2. Finds match → sends to Deluge
+2. Finds match → sends to qBittorrent
 3. Download completes → moves to `/movies`
 4. Renames and organizes automatically
 5. Updates Plex library
@@ -893,6 +970,9 @@ Automated movie downloading, renaming, and organization.
 ---
 
 ## 📺 Sonarr (TV Show Management)
+
+![Sonarr Dashboard](img/sonarr.png)
+*Automated TV series download and collection management.*
 
 **Container**: `sonarr`  
 **Web UI**: `https://sonarr.${SERVERNAME}`
@@ -902,13 +982,13 @@ Automated TV show downloading with episode tracking and season management.
 
 ### 🔧 Setup Steps
 
-#### Step 1: Add Download Client (Deluge)
-1. Settings → Download Clients → Add → Deluge
+#### Step 1: Add Download Client (qBittorrent)
+1. Settings → Download Clients → Add → qBittorrent
 2. Configure:
-   - **Name**: Deluge
-   - **Host**: `deluge`
+   - **Name**: qBittorrent
+   - **Host**: `qbittorrent`
    - **Port**: `8112`
-   - **Password**: (Deluge password)
+   - **Password**: (qBittorrent password)
    - **Category**: `sonarr-tv`
 3. Test and Save
 
@@ -948,6 +1028,9 @@ Automated TV show downloading with episode tracking and season management.
 ---
 
 ## 📝 Bazarr (Subtitles)
+
+![Bazarr Dashboard](img/bazarr.png)
+*Companion application to download missing subtitles.*
 
 **Container**: `bazarr`  
 **Web UI**: `https://bazarr.${SERVERNAME}`
@@ -1011,15 +1094,15 @@ Automatic subtitle downloading for your media in 40+ languages.
 **Purpose**: VPN tunnel for secure downloading
 
 ### 📖 About
-Routes Deluge traffic through NordVPN to protect privacy.
+Routes qBittorrent traffic through NordVPN to protect privacy.
 
 ### ⚙️ Configuration
 
 Set in `.env`:
 ```bash
-NORDVPN_USER=your_email@example.com
-NORDVPN_PASS=your_password
-NORDVPN_COUNTRY=US
+VPN_USER=your_email@example.com
+VPN_PWD=your_password
+VPN_COUNTRY=US
 NORDVPN_PROTOCOL=nordlynx  # fastest
 ```
 
@@ -1041,11 +1124,14 @@ docker exec nordvpn curl https://ipinfo.io
 
 ---
 
-## 📥 Deluge (Download Client)
+## 📥 qBittorrent (Download Client)
 
-**Container**: `deluge`  
-**Web UI**: `https://deluge.${SERVERNAME}`  
-**Default Password**: `deluge` ⚠️ **CHANGE IMMEDIATELY!**
+![qBittorrent](img/qbittorrent.png)
+*BitTorrent client routing all traffic through NordVPN.*
+
+**Container**: `qbittorrent`  
+**Web UI**: `https://qbittorrent.${SERVERNAME}`  
+**Default Password**: `qbittorrent` ⚠️ **CHANGE IMMEDIATELY!**
 
 ### 📖 About
 BitTorrent client running behind NordVPN for secure downloads.
@@ -1053,7 +1139,7 @@ BitTorrent client running behind NordVPN for secure downloads.
 ### 🔧 Setup Steps
 
 #### Step 1: Change Default Password
-1. Login with password: `deluge`
+1. Login with password: `qbittorrent`
 2. Preferences → Interface → Password
 3. Set a strong password
 
@@ -1101,6 +1187,9 @@ Automatically used by Prowlarr when enabled. No manual configuration needed.
 ---
 
 ## 🎬 Plex Media Server
+
+![Plex Dashboard](img/plex.png)
+*Your personal Netflix - stream media to any device, anywhere.*
 
 **Container**: `plex-server`  
 **Web UI**: `http://<your-server-ip>:32400/web`
@@ -1189,6 +1278,9 @@ plextraktsync
 
 ## 🎞️ Tdarr (Transcoding)
 
+![Tdarr Dashboard](img/tdarr.png)
+*Distributed audio and video transcoding and library management.*
+
 **Container**: `tdarr`  
 **Web UI**: `https://tdarr.${SERVERNAME}`
 
@@ -1223,6 +1315,9 @@ Transcoding is **CPU/GPU intensive** and can take days for large libraries. Star
 
 ## 📖 Kavita (Ebook/Comic Server)
 
+![Kavita Dashboard](img/kavita.png)
+*Digital library for ebooks, comics, manga, and PDFs with a beautiful web reader.*
+
 **Container**: `kavita`  
 **Web UI**: `https://kavita.${SERVERNAME}`
 
@@ -1250,6 +1345,9 @@ Digital library for ebooks, comics, manga, and PDFs with a beautiful web reader.
 
 ## ☁️ Nextcloud
 
+![Nextcloud Dashboard](img/nextcloud.png)
+*Self-hosted file sync and collaboration - your own Dropbox/Google Drive.*
+
 **Container**: `nextcloud`  
 **Web UI**: `https://nextcloud.${SERVERNAME}`
 
@@ -1260,9 +1358,9 @@ Self-hosted file sync and collaboration - your own Dropbox/Google Drive.
 
 1. **Complete Setup Wizard**:
    - Create admin account
-   - Connect to PostgreSQL database:
+   - Connect to MariaDB database:
      - **User**: `nextcloud` (from .env)
-     - **Password**: `${POSTGRES_PASSWORD}`
+     - **Password**: `${MYSQL_PASSWORD}`
      - **Database**: `nextcloud`
      - **Host**: `database:5432`
 
@@ -1285,6 +1383,9 @@ Self-hosted file sync and collaboration - your own Dropbox/Google Drive.
 ---
 
 ## 💾 Duplicati (Backups)
+
+![Duplicati Dashboard](img/duplicati.png)
+*Securely stores encrypted, incremental, compressed remote backups.*
 
 **Container**: `duplicati`  
 **Web UI**: `https://duplicati.${SERVERNAME}`
@@ -1331,6 +1432,9 @@ Encrypted backup solution supporting cloud storage providers.
 
 ## 🐳 Portainer (Container Management)
 
+![Portainer Dashboard](img/portainer.png)
+*Powerful container management platform.*
+
 **Container**: `portainer`  
 **Web UI**: `https://portainer.${SERVERNAME}`
 
@@ -1372,18 +1476,6 @@ Custom container for TrueNAS API integration (if you use TrueNAS for storage).
 
 ---
 
-## 🤖 Clawdbot (AI Assistant)
-
-**Container**: `clawdbot`  
-**Web UI**: `https://clawdbot.${SERVERNAME}`
-
-### 📖 About
-AI-powered assistant that can control your entire stack, automate tasks, and respond to natural language commands.
-
-See [detailed setup guide below](#-adding-clawdbot).
-
----
-
 ## 🔗 Service Integration Guide
 
 ### 🎬 Complete Media Pipeline Setup
@@ -1392,10 +1484,10 @@ Follow this order for seamless integration:
 
 #### 1️⃣ VPN & Download Client (15 min)
 ```
-NordVPN → Deluge
+NordVPN → qBittorrent
 ```
 1. Verify VPN is connected
-2. Setup Deluge labels for movies/tv
+2. Setup qBittorrent labels for movies/tv
 3. Change default password
 4. Test with a legal torrent
 
@@ -1409,19 +1501,19 @@ FlareSolverr → Prowlarr
 
 #### 3️⃣ Media Management (20 min)
 ```
-Prowlarr → Radarr → Deluge
-Prowlarr → Sonarr → Deluge
+Prowlarr → Radarr → qBittorrent
+Prowlarr → Sonarr → qBittorrent
 ```
 
 **Radarr**:
-1. Add Deluge as download client
+1. Add qBittorrent as download client
 2. Add `/movies` root folder
 3. Connect Prowlarr app
 4. Sync indexers
 5. Add a test movie
 
 **Sonarr**:
-1. Add Deluge as download client
+1. Add qBittorrent as download client
 2. Add `/tv` root folder
 3. Connect Prowlarr app
 4. Sync indexers
@@ -1449,9 +1541,9 @@ Radarr/Sonarr → Plex
 
 #### 6️⃣ Request System (10 min)
 ```
-Plex → Overseerr → Radarr/Sonarr
+Plex → Seerr → Radarr/Sonarr
 ```
-1. Sign in to Overseerr with Plex
+1. Sign in to Seerr with Plex
 2. Sync Plex libraries
 3. Connect Radarr (with API key)
 4. Connect Sonarr (with API key)
@@ -1467,17 +1559,17 @@ All Services → Homarr
 
 ### 🎯 Test the Complete Flow
 
-1. **Request**: Use Overseerr to request a movie
+1. **Request**: Use Seerr to request a movie
 2. **Watch**: It should:
    - ✅ Appear in Radarr
    - ✅ Search indexers via Prowlarr
-   - ✅ Send to Deluge (through VPN)
+   - ✅ Send to qBittorrent (through VPN)
    - ✅ Download complete
    - ✅ Move to `/movies` folder
    - ✅ Get renamed by Radarr
    - ✅ Fetch subtitles via Bazarr
    - ✅ Appear in Plex
-   - ✅ Mark as "Available" in Overseerr
+   - ✅ Mark as "Available" in Seerr
 
 🎉 **If all steps work**: Your media pipeline is fully automated!
 
@@ -1528,304 +1620,6 @@ Protect services with different auth levels:
 
 # No auth (service handles it)
 - "traefik.http.routers.SERVICE.middlewares=sanitize-headers"
-```
-
----
-
-## 🤖 Adding Clawdbot
-
-Clawdbot is an AI assistant that can control and automate your entire stack with natural language.
-
-### 🌟 What Clawdbot Can Do
-- 📊 Monitor download queues
-- 🎬 Search and add media via voice/text
-- 📈 Check system resources
-- 🔍 Search logs and troubleshoot issues
-- ⚙️ Manage containers (start/stop/restart)
-- 📝 Generate reports
-- 🤖 Automate repetitive tasks
-- 💬 Respond in Discord/Telegram/etc.
-
----
-
-### 📋 Prerequisites
-
-Before adding Clawdbot:
-- ✅ All core services running
-- ✅ AI provider account (OpenAI, Anthropic, GitHub Copilot, etc.)
-- ✅ Basic understanding of AI assistants
-
----
-
-### 🚀 Installation Steps
-
-#### 1. Build the Docker Image
-
-```bash
-# Clone Clawdbot repository
-cd /tmp
-git clone https://github.com/clawdbot/clawdbot.git
-cd clawdbot
-
-# Build image (takes 5-10 minutes)
-docker build -t clawdbot:local -f Dockerfile .
-
-# Verify image
-docker images | grep clawdbot
-
-# Clean up repo
-cd ..
-rm -rf clawdbot
-```
-
----
-
-#### 2. Create Workspace
-
-Clawdbot needs a workspace directory for configuration and memory:
-
-```bash
-# Use variables from .env
-source .env
-
-# Create directories
-mkdir -p ${CONFIG}/clawdbot
-mkdir -p ${ROOT}/clawdbot-workspace
-
-# Option A: Clone existing workspace (if you have one)
-cd ${ROOT}/clawdbot-workspace
-git clone https://github.com/YOUR_USERNAME/YOUR_CLAWDBOT_WORKSPACE.git .
-
-# Option B: Leave empty for fresh setup (Clawdbot will initialize)
-
-# Set permissions
-chown -R ${PUID}:${PGID} ${CONFIG}/clawdbot ${ROOT}/clawdbot-workspace
-chmod -R 755 ${CONFIG}/clawdbot ${ROOT}/clawdbot-workspace
-```
-
----
-
-#### 3. Add Service to docker-compose.yml
-
-Add this service definition at the end of your `docker-compose.yml`:
-
-```yaml
-  ############################
-  # Clawdbot - AI Assistant
-  ############################
-  clawdbot:
-    container_name: clawdbot
-    image: clawdbot:local
-    restart: unless-stopped
-    expose:
-      - "18789"
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.115  # Pick an available IP
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - HOME=/home/node
-      - TERM=xterm-256color
-      - BROWSER=echo
-    volumes:
-      - ${CONFIG}/clawdbot:/home/node/.clawdbot
-      - ${ROOT}/clawdbot-workspace:/home/node/clawd
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker control
-    labels:
-      # Watchtower
-      - com.centurylinklabs.watchtower.enable=true
-      
-      # Traefik
-      - "traefik.enable=true"
-      - "traefik.http.routers.clawdbot.rule=Host(`clawdbot.${SERVERNAME}`)"
-      - "traefik.http.routers.clawdbot.middlewares=sanitize-headers"
-      - "traefik.http.routers.clawdbot.entrypoints=websecure"
-      - "traefik.http.routers.clawdbot.tls=true"
-      - "traefik.http.routers.clawdbot.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.clawdbot.service=clawdbot"
-      - "traefik.http.services.clawdbot.loadbalancer.server.port=18789"
-    depends_on:
-      - traefik
-```
-
-**⚠️ Note**: Clawdbot has its own authentication (gateway token), so we only use `sanitize-headers` middleware.
-
----
-
-#### 4. Start Clawdbot
-
-```bash
-cd ~/htpc-box-docker
-
-# Validate configuration
-docker compose config
-
-# Start Clawdbot
-docker compose up -d clawdbot
-
-# Check logs
-docker compose logs -f clawdbot
-```
-
-You should see Clawdbot starting up. Press `Ctrl+C` to exit logs.
-
----
-
-#### 5. Run Onboarding
-
-```bash
-docker compose exec clawdbot node dist/index.js onboard
-```
-
-Follow the interactive prompts:
-
-**🎨 Choose Your Setup**:
-- **Quick**: Basic setup (recommended for first time)
-- **Custom**: Advanced configuration
-
-**🤖 AI Provider**:
-- OpenAI (ChatGPT)
-- Anthropic (Claude)
-- GitHub Copilot
-- xAI (Grok)
-- Google AI
-
-**🔑 Provide API Key**:
-- Enter your AI provider API key
-- This is stored securely in `/config/clawdbot`
-
-**🌐 Web Chat (Optional)**:
-- Enable web interface?
-- Set admin password
-
-**🔐 Gateway Token**:
-- Generate secure token (save this!)
-- Used for API access and node pairing
-
----
-
-#### 6. Access Web UI
-
-Once onboarding completes:
-
-**URL**: `https://clawdbot.${SERVERNAME}`
-
-**Login**:
-- Use the gateway token from onboarding
-- Or the admin password if you enabled web chat
-
-🎉 **You're in!** Clawdbot is ready to help.
-
----
-
-#### 7. Add Nodes (Optional)
-
-Connect other computers (Mac, PC) as execution nodes for distributed control.
-
-**On your Mac/PC:**
-
-```bash
-# Install Clawdbot CLI globally
-npm install -g clawdbot
-
-# Pair with your server
-clawdbot node install \
-  --host clawdbot.yourdomain.com \
-  --port 443 \
-  --display-name "My MacBook Pro"
-
-# Or use IP and port 18789 if not using domain
-clawdbot node install \
-  --host 192.168.1.100 \
-  --port 18789 \
-  --display-name "My Computer"
-```
-
-You'll see a pairing request ID.
-
-**Back on the server:**
-
-```bash
-# View pending pairing requests
-docker compose exec clawdbot node dist/index.js nodes pending
-
-# Approve the request
-docker compose exec clawdbot node dist/index.js nodes approve <requestId>
-
-# Verify connection
-docker compose exec clawdbot node dist/index.js nodes status
-```
-
-**✅ Node Connected!** Clawdbot can now:
-- Execute commands on your computer
-- Run macOS-specific skills (Apple Notes, Reminders, iMessage)
-- Capture screenshots/camera
-- Access files (with permissions)
-
----
-
-### 🔄 Updating Clawdbot
-
-**Method 1: Manual Update**
-
-```bash
-# Pull latest code
-cd /tmp
-git clone https://github.com/clawdbot/clawdbot.git
-cd clawdbot
-
-# Rebuild image
-docker build -t clawdbot:local -f Dockerfile .
-
-# Restart container
-cd ~/htpc-box-docker
-docker compose up -d clawdbot
-
-# Verify
-docker compose logs clawdbot
-```
-
-**Method 2: Watchtower (Automatic)**
-
-If you push `clawdbot:local` to a Docker registry, Watchtower will auto-update it.
-
----
-
-### 💬 Using Clawdbot
-
-**Web Chat**:
-- Go to `https://clawdbot.${SERVERNAME}`
-- Ask questions in natural language
-
-**Examples**:
-```
-"What's downloading right now?"
-"Add the movie Inception to Radarr"
-"Show me system resources"
-"Restart the Plex container"
-"Check logs for errors"
-"What's the VPN IP address?"
-```
-
-**API Access**:
-- Integrate with Discord, Telegram, Slack
-- Build custom automations
-- Create workflows
-
----
-
-### 🛠️ Clawdbot Configuration
-
-Config files are in `${CONFIG}/clawdbot/`:
-
-**config.yml**: Main configuration
-**workspace**: Your identity, memory, and skills
-
-Edit directly or through Clawdbot:
-```bash
-docker compose exec clawdbot node dist/index.js config
 ```
 
 ---
@@ -1984,8 +1778,8 @@ docker exec plex-server \
   '/usr/lib/plexmediaserver/Plex Media Scanner' --scan --refresh \
   --section 1  # Section ID from library settings
 
-# Deluge: List active torrents
-docker exec deluge deluge-console "info"
+# qBittorrent: List active torrents
+docker exec qbittorrent qbittorrent-console "info"
 ```
 
 ---
@@ -2082,10 +1876,10 @@ docker network inspect npm_proxy
 
 ---
 
-### 🔒 VPN Not Working / Deluge No Internet
+### 🔒 VPN Not Working / qBittorrent No Internet
 
 **Symptoms**:
-- Deluge can't download torrents
+- qBittorrent can't download torrents
 - "No incoming connections" warning
 - Downloads stuck at 0%
 
@@ -2097,15 +1891,15 @@ docker compose logs nordvpn
 # Test VPN IP
 docker exec nordvpn curl https://ipinfo.io
 
-# Check Deluge can reach internet
-docker exec deluge ping -c 3 8.8.8.8
+# Check qBittorrent can reach internet
+docker exec qbittorrent ping -c 3 8.8.8.8
 ```
 
 **Solutions**:
 
 1. **Verify VPN Credentials**:
    - Check `.env` file
-   - Ensure `NORDVPN_USER` and `NORDVPN_PASS` are correct
+   - Ensure `VPN_USER` and `VPN_PWD` are correct
 
 2. **Restart VPN**:
    ```bash
@@ -2113,12 +1907,12 @@ docker exec deluge ping -c 3 8.8.8.8
    
    # Wait 30 seconds
    
-   docker compose restart deluge
+   docker compose restart qbittorrent
    ```
 
 3. **Change VPN Server**:
    - Edit `.env`
-   - Try different country: `NORDVPN_COUNTRY=CH`
+   - Try different country: `VPN_COUNTRY=CH`
    - Restart services
 
 4. **Check VPN Protocol**:
@@ -2385,7 +2179,7 @@ ls -la ${ROOT}/movies | head
 ### 🛡️ Essential Security
 
 1. **🔑 Change Default Passwords**:
-   - Deluge: `deluge` → strong password
+   - qBittorrent: `qbittorrent` → strong password
    - Portainer: Set during first login
    - All services: Use unique, strong passwords
 
@@ -2428,7 +2222,7 @@ ls -la ${ROOT}/movies | head
 ### 🛡️ Advanced Security
 
 6. **🔒 VPN for Downloads**:
-   - Keep Deluge behind NordVPN
+   - Keep qBittorrent behind NordVPN
    - Never expose download client to internet
 
 7. **💾 Regular Backups**:
@@ -2464,7 +2258,7 @@ ls -la ${ROOT}/movies | head
 ### ⚠️ Security Warnings
 
 **Don't**:
-- ❌ Expose Radarr/Sonarr/Deluge directly to internet
+- ❌ Expose Radarr/Sonarr/qBittorrent directly to internet
 - ❌ Use default passwords
 - ❌ Run containers as root (use PUID/PGID)
 - ❌ Commit `.env` to public repos
@@ -2514,10 +2308,10 @@ We welcome contributions! Here's how you can help:
 
 This stack is built using excellent Docker images from:
 
-- **[LinuxServer.io](https://www.linuxserver.io/)**: Radarr, Sonarr, Prowlarr, Bazarr, Deluge, Kavita, Duplicati
+- **[LinuxServer.io](https://www.linuxserver.io/)**: Radarr, Sonarr, Prowlarr, Bazarr, qBittorrent, Kavita, Duplicati
 - **[Traefik Labs](https://traefik.io/)**: Traefik reverse proxy
 - **[Plex Inc](https://www.plex.tv/)**: Plex Media Server
-- **[Overseerr](https://overseerr.dev/)**: Request management
+- **[Seerr](https://seerr.dev/)**: Request management
 - **[Homarr](https://homarr.dev/)**: Dashboard
 - **[Nextcloud](https://nextcloud.com/)**: File sync
 - **[Tdarr](https://tdarr.io/)**: Media transcoding
@@ -2557,7 +2351,7 @@ Individual services have their own licenses:
 - [r/PleX](https://reddit.com/r/PleX)
 
 ### 🐛 Issues
-- [GitHub Issues](https://github.com/YOUR_USERNAME/htpc-box-docker/issues)
+- [GitHub Issues](https://github.com/me-cedric/htpc-box-docker/issues)
 
 ---
 
@@ -2565,7 +2359,7 @@ Individual services have their own licenses:
 
 ### 🎬 Happy Streaming! 🍿
 
-Made with ❤️ by the self-hosting community
+Made with ❤️
 
 ⭐ Star this repo if it helped you! ⭐
 

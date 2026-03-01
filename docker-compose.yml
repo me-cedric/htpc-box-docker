@@ -446,13 +446,13 @@ services:
     restart: always
     environment:
       - BASEURL=http://192.168.89.104:7878 # IP or FQDN           (Required)
-      - APIKEY=eb4e4bfd01f043d193b38ef0056db553 # Radarr API Key       (Required)                
-      - PLATFORM=radarr               # "radarr", "sonarr".. (Optional) default: radarr
-      - TIME_THRESHOLD=2h             # 1d, 6h, 30m, etc..   (Optional) default: 2h    
-      - SIZE_THRESHOLD=25GB           # 1TB, 1GB, 1MB, etc.. (Optional) default: 25GB  
-      - CHECK_INTERVAL=10m            # 1d, 6h, 30m, etc..   (Optional) default: 10m   
-      - STRIKE_THRESHOLD=3            # Positive number      (Optional) default: 3     
-      - AGGRESSIVE_STRIKES=true      # Boolean              (Optional) default: false 
+      - APIKEY=${RADARR_API_KEY} # Radarr API Key       (Required)
+      - PLATFORM=radarr # "radarr", "sonarr".. (Optional) default: radarr
+      - TIME_THRESHOLD=2h # 1d, 6h, 30m, etc..   (Optional) default: 2h
+      - SIZE_THRESHOLD=25GB # 1TB, 1GB, 1MB, etc.. (Optional) default: 25GB
+      - CHECK_INTERVAL=10m # 1d, 6h, 30m, etc..   (Optional) default: 10m
+      - STRIKE_THRESHOLD=3 # Positive number      (Optional) default: 3
+      - AGGRESSIVE_STRIKES=true # Boolean              (Optional) default: false
 
   swaparr-sonarr:
     image: ghcr.io/thijmengthn/swaparr:latest
@@ -463,13 +463,13 @@ services:
     restart: always
     environment:
       - BASEURL=http://192.168.89.105:8989 # IP or FQDN           (Required)
-      - APIKEY=b314d1846b994120bc2b144279b4ae78 # Sonarr API Key       (Required)                
-      - PLATFORM=sonarr               # "radarr", "sonarr".. (Optional) default: radarr
-      - TIME_THRESHOLD=2h             # 1d, 6h, 30m, etc..   (Optional) default: 2h    
-      - SIZE_THRESHOLD=25GB           # 1TB, 1GB, 1MB, etc.. (Optional) default: 25GB  
-      - CHECK_INTERVAL=10m            # 1d, 6h, 30m, etc..   (Optional) default: 10m   
-      - STRIKE_THRESHOLD=3            # Positive number      (Optional) default: 3     
-      - AGGRESSIVE_STRIKES=true      # Boolean              (Optional) default: false
+      - APIKEY=${SONARR_API_KEY} # Sonarr API Key       (Required)
+      - PLATFORM=sonarr # "radarr", "sonarr".. (Optional) default: radarr
+      - TIME_THRESHOLD=2h # 1d, 6h, 30m, etc..   (Optional) default: 2h
+      - SIZE_THRESHOLD=25GB # 1TB, 1GB, 1MB, etc.. (Optional) default: 25GB
+      - CHECK_INTERVAL=10m # 1d, 6h, 30m, etc..   (Optional) default: 10m
+      - STRIKE_THRESHOLD=3 # Positive number      (Optional) default: 3
+      - AGGRESSIVE_STRIKES=true # Boolean              (Optional) default: false
 
   ############################
   # Plex (open access)
@@ -875,40 +875,3 @@ services:
       - "traefik.http.services.tdarr.loadbalancer.server.port=8265"
     depends_on:
       - traefik
-
-  ############################
-  # Clawdbot - AI Assistant
-  ############################
-#  clawdbot:
-#    container_name: clawdbot
-#    image: clawdbot:local
-#    command: ["node", "dist/index.js", "gateway"]
-#    ports:
-#      - "18789:18789"
-#    networks:
-#      npm_proxy:
-#        ipv4_address: 192.168.89.115
-#    <<: *common-keys-media
-#    environment:
-#      - PUID=${PUID}
-#      - PGID=${PGID}
-#      - TZ=${TZ}
-#      - HOME=/home/node
-#      - TERM=xterm-256color
-#      - BROWSER=echo
-#    volumes:
-#      - ${CONFIG}/clawdbot:/home/node/.clawdbot
-#      - ${ROOT}/clawdbot-workspace:/home/node/clawd
-#      - /var/run/docker.sock:/var/run/docker.sock:ro
-#    labels:
-#      - com.centurylinklabs.watchtower.enable=true
-#      - "traefik.enable=true"
-#      - "traefik.http.routers.clawdbot.rule=Host(`clawdbot.${SERVERNAME}`)"
-#      - "traefik.http.routers.clawdbot.middlewares=sanitize-headers"
-#      - "traefik.http.routers.clawdbot.entrypoints=websecure"
-#      - "traefik.http.routers.clawdbot.tls=true"
-#      - "traefik.http.routers.clawdbot.tls.certresolver=letsencrypt"
-#      - "traefik.http.routers.clawdbot.service=clawdbot"
-#      - "traefik.http.services.clawdbot.loadbalancer.server.port=18789"
-#    depends_on:
-#      - traefik
