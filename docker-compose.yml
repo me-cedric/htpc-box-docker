@@ -466,8 +466,9 @@ services:
   ############################
   gluetun:
     container_name: gluetun
-    mem_limit: 256m
+    mem_limit: 512m
     image: qmcgaw/gluetun:latest
+    restart: unless-stopped
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.160
