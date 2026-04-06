@@ -28,8 +28,8 @@ http:
     - 172.16.0.0/12
     - 127.0.0.1
   # Set both URLs so the companion app and webhooks work from inside and outside
-  # external_url: "https://ha.<SERVERNAME>"
-  # internal_url: "http://<HOST_LAN_IP>:8124"
+  external_url: !env_var HA_EXTERNAL_URL
+  internal_url: !env_var HA_INTERNAL_URL
 
 # ---------------------------------------------------------------------------
 # Mi lights (Yeelight)

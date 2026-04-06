@@ -971,6 +971,10 @@ services:
     environment:
       # PUID/PGID not used — HA manages its own user inside the container
       TZ: ${TZ}
+      # Full URLs constructed here so HA config can use !env_var directly
+      # (HA's !env_var substitutes the whole value — no mid-string interpolation)
+      HA_EXTERNAL_URL: "https://ha.${SERVERNAME}"
+      HA_INTERNAL_URL: "http://${HOST_IP}:8124"
     volumes:
       - ${CONFIG}/homeassistant:/config
       - ./homeassistant-configuration.yaml:/config/configuration.yaml:ro
