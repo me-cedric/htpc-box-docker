@@ -1,0 +1,79 @@
+# Home Assistant — initial configuration
+# -----------------------------------------
+# Mounted directly into the container as /config/configuration.yaml (read-only).
+# Edit this file and restart the container to apply changes.
+#
+# First run: HA will launch the onboarding wizard at ha.<SERVERNAME>
+# Complete onboarding, then restart the container to apply http: settings.
+
+homeassistant:
+  name: Home
+  unit_system: metric
+  currency: EUR          # adjust if needed
+
+# Loads most built-in integrations: Google Cast, mobile_app,
+# energy, history, logbook, frontend, etc.
+default_config:
+
+# ---------------------------------------------------------------------------
+# REQUIRED: Traefik reverse-proxy settings
+# Without trusted_proxies HA rejects forwarded connections.
+# ---------------------------------------------------------------------------
+http:
+  server_port: 8124      # 8123 already bound by qBittorrent/gluetun on this host
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 192.168.89.0/24    # npm_proxy Docker network (Traefik)
+    # Docker bridge NAT range — actual source IP Traefik uses to reach host-networked HA
+    - 172.16.0.0/12
+    - 127.0.0.1
+  # Set both URLs so the companion app and webhooks work from inside and outside
+  # external_url: "https://ha.<SERVERNAME>"
+  # internal_url: "http://<HOST_LAN_IP>:8124"
+
+# ---------------------------------------------------------------------------
+# Mi lights (Yeelight)
+# ---------------------------------------------------------------------------
+# Modern HA: add via UI → Settings → Integrations → Yeelight
+# HA will auto-discover bulbs over mDNS on the LAN (works because of host networking).
+# If auto-discovery fails, add bulbs manually by LAN IP in the integration settings.
+
+# ---------------------------------------------------------------------------
+# LEDVANCE SMART+ lights
+# ---------------------------------------------------------------------------
+# Add via UI → Settings → Integrations → LEDVANCE
+# Uses the LEDVANCE cloud API — no Zigbee coordinator required.
+# Alternatively: if bulbs are Zigbee-native and you add a USB coordinator later,
+# use the Zigbee Home Automation (ZHA) integration instead.
+
+# ---------------------------------------------------------------------------
+# JBL Bar 3.1 soundbar (Chromecast built-in)
+# ---------------------------------------------------------------------------
+# Discovered automatically by the Google Cast integration (included in default_config).
+# Will appear as a media player entity once HA finds it on the LAN via mDNS.
+
+# ---------------------------------------------------------------------------
+# Google Homes
+# ---------------------------------------------------------------------------
+# Add via UI → Settings → Integrations → Google Cast
+# All Google Home / Nest speakers are discovered automatically over mDNS.
+# For Google Assistant control of HA devices (reverse direction):
+#   → Settings → Integrations → Google Assistant (requires GCP project + Nabu Casa or manual setup)
+
+# ---------------------------------------------------------------------------
+# Philips air conditioners
+# ---------------------------------------------------------------------------
+# Integration depends on the model:
+#   - Most Philips ACs with Wi-Fi use the Tuya platform underneath.
+#     Add via UI → Settings → Integrations → Tuya (needs Tuya IoT Platform account).
+#   - If your model uses the Philips AirControl app:
+#     Install HACS (https://hacs.xyz), then add the
+#     "Philips AirPurifier Coap" integration from HACS — it also supports
+#     several AC models using the same local CoAP protocol.
+#   - Check your model number on https://www.home-assistant.io/integrations/
+
+# ---------------------------------------------------------------------------
+# Recorder — how long to keep history (tune to your storage)
+# ---------------------------------------------------------------------------
+recorder:
+  purge_keep_days: 14

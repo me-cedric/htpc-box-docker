@@ -953,3 +953,40 @@ services:
       - "traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=http"
     depends_on:
       - traefik
+
+  ############################
+  # Home Assistant (admin group)
+  ############################
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:stable
+    mem_limit: 1g
+    # host networking is required for mDNS/multicast device discovery
+    # (Google Home/Cast, Yeelight LAN protocol, JBL Chromecast)
+    # NOTE: cannot use <<: *common-keys-media (incompatible with network_mode: host)
+    network_mode: host
+    restart: unless-stopped
+    security_opt:
+      - "no-new-privileges:true"
+    environment:
+      # PUID/PGID not used — HA manages its own user inside the container
+      TZ: ${TZ}
+    volumes:
+      - ${CONFIG}/homeassistant:/config
+      - ./homeassistant-configuration.yaml:/config/configuration.yaml:ro
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.homeassistant.rule=Host(`ha.${SERVERNAME}`)"
+      # No forward-auth — HA has its own auth; adding both would break mobile app & API tokens
+      - "traefik.http.routers.homeassistant.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.homeassistant.entrypoints=websecure"
+      - "traefik.http.routers.homeassistant.tls=true"
+      - "traefik.http.routers.homeassistant.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.homeassistant.service=homeassistant"
+      # host-networked containers have no Docker IP — point Traefik at the NAS LAN IP directly
+      # Port 8124 is used (8123 is already bound by qBittorrent/gluetun on this host)
+      # Requires HOST_IP=192.168.1.53 in .env
+      - "traefik.http.services.homeassistant.loadbalancer.server.url=http://${HOST_IP}:8124"
+    depends_on:
+      - traefik
