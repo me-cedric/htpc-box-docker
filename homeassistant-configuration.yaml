@@ -10,6 +10,9 @@ homeassistant:
   name: Home
   unit_system: metric
   currency: EUR          # adjust if needed
+  # external_url/internal_url live here since HA 2021.7, not under http:
+  external_url: !env_var HA_EXTERNAL_URL
+  internal_url: !env_var HA_INTERNAL_URL
 
 # Loads most built-in integrations: Google Cast, mobile_app,
 # energy, history, logbook, frontend, etc.
@@ -27,9 +30,6 @@ http:
     # Docker bridge NAT range — actual source IP Traefik uses to reach host-networked HA
     - 172.16.0.0/12
     - 127.0.0.1
-  # Set both URLs so the companion app and webhooks work from inside and outside
-  external_url: !env_var HA_EXTERNAL_URL
-  internal_url: !env_var HA_INTERNAL_URL
 
 # ---------------------------------------------------------------------------
 # Mi lights (Yeelight)
