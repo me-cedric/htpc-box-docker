@@ -80,24 +80,32 @@ services:
       - "traefik.http.routers.traefik.tls=true"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.traefik.middlewares=sanitize-headers,forward-auth\
+        ,auth-admin"
       # Redirect HTTP → HTTPS
       - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       # Sanitize any client headers before auth
-      - "traefik.http.middlewares.sanitize-headers.headers.customrequestheaders.X-Forwarded-User="
-      - "traefik.http.middlewares.sanitize-headers.headers.customrequestheaders.X-Forwarded-Email="
-      - "traefik.http.middlewares.sanitize-headers.headers.customrequestheaders.X-Forwarded-Groups="
+      - "traefik.http.middlewares.sanitize-headers.headers.customrequestheaders\
+        .X-Forwarded-User="
+      - "traefik.http.middlewares.sanitize-headers.headers.customrequestheaders\
+        .X-Forwarded-Email="
+      - "traefik.http.middlewares.sanitize-headers.headers.customrequestheaders\
+        .X-Forwarded-Groups="
       # User or admin access (user + credentials-admin)
-      - "traefik.http.middlewares.auth-user.headers.customrequestheaders.X-Auth-Group=%{X-Forwarded-Groups}"
-      - "traefik.http.middlewares.auth-user.headers.customresponseheaders.Access-Control-Allow-Origin=*"
-      - "traefik.http.middlewares.auth-user.headers.customresponseheaders.Access-Control-Allow-Credentials=true"
+      - "traefik.http.middlewares.auth-user.headers.customrequestheaders.X-Auth\
+        -Group=%{X-Forwarded-Groups}"
+      - "traefik.http.middlewares.auth-user.headers.customresponseheaders.Acces\
+        s-Control-Allow-Origin=*"
+      - "traefik.http.middlewares.auth-user.headers.customresponseheaders.Acces\
+        s-Control-Allow-Credentials=true"
       # Admin access only (credentials-admin)
-      - "traefik.http.middlewares.auth-admin.headers.customrequestheaders.X-Auth-Group=%{X-Forwarded-Groups}"
+      - "traefik.http.middlewares.auth-admin.headers.customrequestheaders.X-Aut\
+        h-Group=%{X-Forwarded-Groups}"
     healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      test: [ "CMD", "traefik", "healthcheck", "--ping" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -125,15 +133,28 @@ services:
       - ./tfa-config.yaml.template:/etc/traefik-forward-auth/tfa-config.yaml.template:ro
     labels:
       # ForwardAuth: authentication
-      - "traefik.http.middlewares.forward-auth.forwardauth.address=http://traefik-forward-auth:4181/forward/portals/homarr"
-      - "traefik.http.middlewares.forward-auth.forwardauth.trustforwardheader=true"
-      - "traefik.http.middlewares.forward-auth.forwardauth.authresponseheaders=X-Forwarded-User,X-Forwarded-Email,X-Forwarded-Groups,X-Forwarded-Displayname,X-Authenticated-User,X-Forwarded-For,X-Forwarded-Proto"
+      - "traefik.http.middlewares.forward-auth.forwardauth.address=http://traef\
+        ik-forward-auth:4181/forward/portals/homarr"
+      - "traefik.http.middlewares.forward-auth.forwardauth.trustforwardheader=t\
+        rue"
+      - "traefik.http.middlewares.forward-auth.forwardauth.authresponseheaders=\
+        X-Forwarded-User,X-Forwarded-Email,X-Forwarded-Groups,X-Forwarded-Displ\
+        ayname,X-Authenticated-User,X-Forwarded-For,X-Forwarded-Proto"
       - "traefik.enable=true"
-      - "traefik.http.routers.forward-auth.rule=Host(`auth.${SERVERNAME}`) && PathPrefix(`/forward`)"
+      # Auth callback/login route
+      - "traefik.http.routers.forward-auth.rule=Host(`auth.${SERVERNAME}`) &&
+        PathPrefix(`/forward`)"
       - "traefik.http.routers.forward-auth.entrypoints=websecure"
       - "traefik.http.routers.forward-auth.tls=true"
       - "traefik.http.routers.forward-auth.tls.certresolver=letsencrypt"
       - "traefik.http.routers.forward-auth.service=forward-auth"
+      # Logout route — clears forward-auth cookie then redirects to PocketID logout
+      - "traefik.http.routers.forward-auth-logout.rule=Host(`auth.${SERVERNAME}\
+        `) && PathPrefix(`/forward/logout`)"
+      - "traefik.http.routers.forward-auth-logout.entrypoints=websecure"
+      - "traefik.http.routers.forward-auth-logout.tls=true"
+      - "traefik.http.routers.forward-auth-logout.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.forward-auth-logout.service=forward-auth"
       - "traefik.http.services.forward-auth.loadbalancer.server.port=4181"
 
   ############################
@@ -210,7 +231,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.homarr.rule=Host(`homarr.${SERVERNAME}`)"
-      - "traefik.http.routers.homarr.middlewares=sanitize-headers,forward-auth,auth-user"
+      - "traefik.http.routers.homarr.middlewares=sanitize-headers,forward-auth,\
+        auth-user"
       - "traefik.http.routers.homarr.entrypoints=websecure"
       - "traefik.http.routers.homarr.tls=true"
       - "traefik.http.routers.homarr.tls.certresolver=letsencrypt"
@@ -242,7 +264,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.portainer.rule=Host(`portainer.${SERVERNAME}`)"
-      - "traefik.http.routers.portainer.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.portainer.middlewares=sanitize-headers,forward-au\
+        th,auth-admin"
       - "traefik.http.routers.portainer.entrypoints=websecure"
       - "traefik.http.routers.portainer.tls=true"
       - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
@@ -274,7 +297,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.prowlarr.rule=Host(`prowlarr.${SERVERNAME}`)"
-      - "traefik.http.routers.prowlarr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.prowlarr.middlewares=sanitize-headers,forward-aut\
+        h,auth-admin"
       - "traefik.http.routers.prowlarr.entrypoints=websecure"
       - "traefik.http.routers.prowlarr.tls=true"
       - "traefik.http.routers.prowlarr.tls.certresolver=letsencrypt"
@@ -311,14 +335,15 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.radarr.rule=Host(`radarr.${SERVERNAME}`)"
-      - "traefik.http.routers.radarr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.radarr.middlewares=sanitize-headers,forward-auth,\
+        auth-admin"
       - "traefik.http.routers.radarr.entrypoints=websecure"
       - "traefik.http.routers.radarr.tls=true"
       - "traefik.http.routers.radarr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.radarr.service=radarr"
       - "traefik.http.services.radarr.loadbalancer.server.port=7878"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      test: [ "CMD", "curl", "-f", "http://localhost:7878/ping" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -351,14 +376,15 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.sonarr.rule=Host(`sonarr.${SERVERNAME}`)"
-      - "traefik.http.routers.sonarr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.sonarr.middlewares=sanitize-headers,forward-auth,\
+        auth-admin"
       - "traefik.http.routers.sonarr.entrypoints=websecure"
       - "traefik.http.routers.sonarr.tls=true"
       - "traefik.http.routers.sonarr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.sonarr.service=sonarr"
       - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8989/ping" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -391,7 +417,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.bazarr.rule=Host(`bazarr.${SERVERNAME}`)"
-      - "traefik.http.routers.bazarr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.bazarr.middlewares=sanitize-headers,forward-auth,\
+        auth-admin"
       - "traefik.http.routers.bazarr.entrypoints=websecure"
       - "traefik.http.routers.bazarr.tls=true"
       - "traefik.http.routers.bazarr.tls.certresolver=letsencrypt"
@@ -420,8 +447,10 @@ services:
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
-      - "traefik.http.routers.flaresolverr.rule=Host(`flaresolverr.${SERVERNAME}`)"
-      - "traefik.http.routers.flaresolverr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.flaresolverr.rule=Host(`flaresolverr.${SERVERNAME\
+        }`)"
+      - "traefik.http.routers.flaresolverr.middlewares=sanitize-headers,forward\
+        -auth,auth-admin"
       - "traefik.http.routers.flaresolverr.entrypoints=websecure"
       - "traefik.http.routers.flaresolverr.tls=true"
       - "traefik.http.routers.flaresolverr.tls.certresolver=letsencrypt"
@@ -489,7 +518,7 @@ services:
       - 6881:6881 # qBittorrent torrenting
       - 6881:6881/udp
     healthcheck:
-      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      test: [ "CMD", "/gluetun-entrypoint", "healthcheck" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -498,7 +527,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.${SERVERNAME}`)"
-      - "traefik.http.routers.qbittorrent.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.qbittorrent.middlewares=sanitize-headers,forward-\
+        auth,auth-admin"
       - "traefik.http.routers.qbittorrent.entrypoints=websecure"
       - "traefik.http.routers.qbittorrent.tls=true"
       - "traefik.http.routers.qbittorrent.tls.certresolver=letsencrypt"
@@ -552,7 +582,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.autobrr.rule=Host(`autobrr.${SERVERNAME}`)"
-      - "traefik.http.routers.autobrr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.autobrr.middlewares=sanitize-headers,forward-auth\
+        ,auth-admin"
       - "traefik.http.routers.autobrr.entrypoints=websecure"
       - "traefik.http.routers.autobrr.tls=true"
       - "traefik.http.routers.autobrr.tls.certresolver=letsencrypt"
@@ -592,7 +623,7 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     environment:
       <<: *common-env
       VERSION: docker
@@ -614,7 +645,7 @@ services:
       - "traefik.http.routers.plex-server.service=plex-server"
       - "traefik.http.services.plex-server.loadbalancer.server.port=32400"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:32400/identity"]
+      test: [ "CMD", "curl", "-f", "http://localhost:32400/identity" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -709,12 +740,13 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     labels:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.tdarr.rule=Host(`tdarr.${SERVERNAME}`)"
-      - "traefik.http.routers.tdarr.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.tdarr.middlewares=sanitize-headers,forward-auth,a\
+        uth-admin"
       - "traefik.http.routers.tdarr.entrypoints=websecure"
       - "traefik.http.routers.tdarr.tls=true"
       - "traefik.http.routers.tdarr.tls.certresolver=letsencrypt"
@@ -748,7 +780,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.kavita.rule=Host(`kavita.${SERVERNAME}`)"
-      - "traefik.http.routers.kavita.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.kavita.middlewares=sanitize-headers,forward-auth,\
+        auth-admin"
       - "traefik.http.routers.kavita.entrypoints=websecure"
       - "traefik.http.routers.kavita.tls=true"
       - "traefik.http.routers.kavita.tls.certresolver=letsencrypt"
@@ -780,7 +813,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.seerr.rule=Host(`seerr.${SERVERNAME}`)"
-      - "traefik.http.routers.seerr.middlewares=sanitize-headers,forward-auth,auth-user"
+      - "traefik.http.routers.seerr.middlewares=sanitize-headers,forward-auth,a\
+        uth-user"
       - "traefik.http.routers.seerr.entrypoints=websecure"
       - "traefik.http.routers.seerr.tls=true"
       - "traefik.http.routers.seerr.tls.certresolver=letsencrypt"
@@ -806,7 +840,7 @@ services:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
       - MYSQL_USER=${MYSQL_USER}
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -826,7 +860,7 @@ services:
     security_opt:
       - "no-new-privileges=true"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -862,7 +896,8 @@ services:
       - MYSQL_USER=${MYSQL_USER}
       - MYSQL_HOST=database
       - REDIS_HOST=redis
-      - "NEXTCLOUD_TRUSTED_DOMAINS=localhost 0.0.0.0 192.168.89.0 ${SERVERNAME} homarr.${SERVERNAME} nextcloud.${SERVERNAME}"
+      - "NEXTCLOUD_TRUSTED_DOMAINS=localhost 0.0.0.0 192.168.89.0 ${SERVERNAME}
+        homarr.${SERVERNAME} nextcloud.${SERVERNAME}"
       - TRUSTED_PROXIES=192.168.89.0/24
       - OVERWRITEPROTOCOL=https
     ports:
@@ -871,21 +906,25 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.${SERVERNAME}`)"
-      - "traefik.http.routers.nextcloud.middlewares=auth-admin@docker,sanitize-headers,forward-auth,nextcloud-dav,nextcloud-headers"
+      - "traefik.http.routers.nextcloud.middlewares=auth-admin@docker,sanitize-\
+        headers,forward-auth,nextcloud-dav,nextcloud-headers"
       - "traefik.http.routers.nextcloud.entrypoints=websecure"
       - "traefik.http.routers.nextcloud.tls=true"
       - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
       - "traefik.http.routers.nextcloud.service=nextcloud"
-      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.regex=^/.well-known/ca(l|rd)dav"
-      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.replacement=/remote.php/dav/"
+      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.regex=^/.well-\
+        known/ca(l|rd)dav"
+      - "traefik.http.middlewares.nextcloud-dav.replacepathregex.replacement=/r\
+        emote.php/dav/"
       - "traefik.http.middlewares.nextcloud-headers.headers.stsSeconds=15552000"
-      - "traefik.http.middlewares.nextcloud-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.nextcloud-headers.headers.stsIncludeSubdomain\
+        s=true"
       - "traefik.http.middlewares.nextcloud-headers.headers.stsPreload=true"
       - "traefik.http.middlewares.nextcloud-headers.headers.forceSTSHeader=true"
       - "traefik.http.services.nextcloud.loadbalancer.server.port=80"
       - "traefik.docker.network=npm_proxy"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/status.php"]
+      test: [ "CMD", "curl", "-f", "http://localhost:80/status.php" ]
       interval: 60s
       timeout: 10s
       retries: 3
@@ -916,7 +955,8 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.duplicati.rule=Host(`duplicati.${SERVERNAME}`)"
-      - "traefik.http.routers.duplicati.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.duplicati.middlewares=sanitize-headers,forward-au\
+        th,auth-admin"
       - "traefik.http.routers.duplicati.entrypoints=websecure"
       - "traefik.http.routers.duplicati.tls=true"
       - "traefik.http.routers.duplicati.tls.certresolver=letsencrypt"
@@ -944,13 +984,15 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       - "traefik.enable=true"
       - "traefik.http.routers.nginx.rule=Host(`truenas.${SERVERNAME}`)"
-      - "traefik.http.routers.nginx.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.nginx.middlewares=sanitize-headers,forward-auth,a\
+        uth-admin"
       - "traefik.http.routers.nginx.entrypoints=websecure"
       - "traefik.http.routers.nginx.tls=true"
       - "traefik.http.routers.nginx.tls.certresolver=letsencrypt"
       - "traefik.http.routers.nginx.service=nginx"
       - "traefik.http.services.nginx.loadbalancer.server.port=8081"
-      - "traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=http"
+      - "traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forw\
+        arded-Proto=http"
     depends_on:
       - traefik
 
@@ -983,7 +1025,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.homeassistant.rule=Host(`ha.${SERVERNAME}`)"
       # No forward-auth — HA has its own auth; adding both would break mobile app & API tokens
-      - "traefik.http.routers.homeassistant.middlewares=sanitize-headers,forward-auth,auth-admin"
+      - "traefik.http.routers.homeassistant.middlewares=sanitize-headers,forwar\
+        d-auth,auth-admin"
       - "traefik.http.routers.homeassistant.entrypoints=websecure"
       - "traefik.http.routers.homeassistant.tls=true"
       - "traefik.http.routers.homeassistant.tls.certresolver=letsencrypt"
@@ -991,6 +1034,7 @@ services:
       # host-networked containers have no Docker IP — point Traefik at the NAS LAN IP directly
       # Port 8124 is used (8123 is already bound by qBittorrent/gluetun on this host)
       # Requires HOST_IP=192.168.1.53 in .env
-      - "traefik.http.services.homeassistant.loadbalancer.server.url=http://${HOST_IP}:8124"
+      - "traefik.http.services.homeassistant.loadbalancer.server.url=http://${H\
+        OST_IP}:8124"
     depends_on:
       - traefik
