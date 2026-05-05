@@ -16,13 +16,13 @@ http:
             - groups
           Headers:
             - Name: "X-Forwarded-Groups"
-              Value: '{{ index .claims "groups" | mapToJsonArray }}'
+              Value: '{{"{{"}} index .claims "groups" | mapToJsonArray {{"}}"}}'
             - Name: "X-Forwarded-User"
-              Value: '{{ index .claims "sub" }}'
+              Value: '{{"{{"}} index .claims "sub" {{"}}"}}'
             - Name: "X-Forwarded-Preferred-Username"
-              Value: '{{ index .claims "preferred_username" }}'
+              Value: '{{"{{"}} index .claims "preferred_username" {{"}}"}}'
             - Name: "X-Forwarded-Email"
-              Value: '{{ index .claims "email" }}'
+              Value: '{{"{{"}} index .claims "email" {{"}}"}}'
           LogoutUri: "/logout"
           PostLogoutRedirectUri: "https://dashboard.{{ env "SERVERNAME" }}"
           Authorization:
@@ -47,13 +47,13 @@ http:
             - groups
           Headers:
             - Name: "X-Forwarded-Groups"
-              Value: '{{ index .claims "groups" | mapToJsonArray }}'
+              Value: '{{"{{"}} index .claims "groups" | mapToJsonArray {{"}}"}}'
             - Name: "X-Forwarded-User"
-              Value: '{{ index .claims "sub" }}'
+              Value: '{{"{{"}} index .claims "sub" {{"}}"}}'
             - Name: "X-Forwarded-Preferred-Username"
-              Value: '{{ index .claims "preferred_username" }}'
+              Value: '{{"{{"}} index .claims "preferred_username" {{"}}"}}'
             - Name: "X-Forwarded-Email"
-              Value: '{{ index .claims "email" }}'
+              Value: '{{"{{"}} index .claims "email" {{"}}"}}'
           LogoutUri: "/logout"
           PostLogoutRedirectUri: "https://dashboard.{{ env "SERVERNAME" }}"
           Authorization:
