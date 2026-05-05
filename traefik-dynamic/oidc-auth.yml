@@ -1,6 +1,6 @@
 http:
   middlewares:
-    # Admin-only access — requires membership in "admin" group
+    # Admin-only access — requires membership in "credentials-admin" group
     oidc-auth-admin:
       plugin:
         traefik-oidc-auth:
@@ -20,9 +20,9 @@ http:
             AssertClaims:
               - Name: "groups"
                 AnyOf:
-                  - "admin"
+                  - "credentials-admin"
 
-    # User access — requires membership in "admin" or "users" group
+    # User access — requires membership in "credentials-admin" or "user" group
     oidc-auth-user:
       plugin:
         traefik-oidc-auth:
@@ -42,5 +42,5 @@ http:
             AssertClaims:
               - Name: "groups"
                 AnyOf:
-                  - "admin"
-                  - "users"
+                  - "credentials-admin"
+                  - "user"
