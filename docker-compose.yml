@@ -965,3 +965,75 @@ services:
         OST_IP}:8124"
     depends_on:
       - traefik
+
+  ############################
+  # HTPC Dashboard (OIDC user group)
+  ############################
+  htpc-dashboard:
+    container_name: htpc-dashboard
+    mem_limit: 512m
+    image: ghcr.io/me-cedric/better-htpc-dashboard:latest
+    ports:
+      - "3000"
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.175
+    <<: *common-keys-media
+    volumes:
+      - ${CONFIG}/htpc-dashboard:/config
+    environment:
+      <<: *common-env
+      APP_BASE_URL: "https://dashboard.${SERVERNAME}"
+      CONFIG_DIR: /config
+      DATABASE_URL: "file:/config/dashboard.sqlite"
+      POCKETID_ISSUER_URL: "https://auth.${SERVERNAME}"
+      POCKETID_CLIENT_ID: ${OIDC_CLIENT_ID}
+      POCKETID_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      POCKETID_ADMIN_ROLE: credentials-admin
+      POCKETID_REQUESTER_ROLE: requester
+      POCKETID_VIEWER_ROLE: user
+      SONARR_BASE_URL: "http://sonarr:8989"
+      RADARR_BASE_URL: "http://radarr:7878"
+      PROWLARR_BASE_URL: "http://prowlarr:9696"
+      QBITTORRENT_BASE_URL: "http://gluetun:8123"
+      PLEX_BASE_URL: "http://plex:32400"
+      DUPLICATI_BASE_URL: "http://duplicati:8200"
+      DOCKER_MANAGEMENT_ENABLED: "true"
+      DOCKER_SOCKET_PROXY_URL: "http://docker-socket-proxy:2375"
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.http.routers.htpc-dashboard.rule=Host(`dashboard.${SERVERNAME}\
+        `)"
+      - "traefik.http.routers.htpc-dashboard.middlewares=oidc-auth-user@file"
+      - "traefik.http.routers.htpc-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.htpc-dashboard.tls=true"
+      - "traefik.http.routers.htpc-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.htpc-dashboard.service=htpc-dashboard"
+      - "traefik.http.services.htpc-dashboard.loadbalancer.server.port=3000"
+    depends_on:
+      - traefik
+      - docker-socket-proxy
+
+  ############################
+  # Docker Socket Proxy (for dashboard container management)
+  ############################
+  docker-socket-proxy:
+    container_name: docker-socket-proxy
+    mem_limit: 128m
+    image: tecnativa/docker-socket-proxy:latest
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.176
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: "1"
+      EVENTS: "1"
+      INFO: "1"
+      NETWORKS: "1"
+      PING: "1"
+      POST: "1"
+      SERVICES: "0"
+      TASKS: "0"
