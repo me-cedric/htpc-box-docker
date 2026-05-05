@@ -6,7 +6,7 @@ http:
         traefik-oidc-auth:
           Secret: "{{ env "OIDC_SECRET" }}"
           Provider:
-            Url: "https://auth.{{ env "SERVERNAME" }}/"
+            Url: "https://auth.{{ env "SERVERNAME" }}"
             ClientId: "{{ env "OIDC_CLIENT_ID" }}"
             ClientSecret: "{{ env "OIDC_CLIENT_SECRET" }}"
           Scopes:
@@ -28,7 +28,7 @@ http:
         traefik-oidc-auth:
           Secret: "{{ env "OIDC_SECRET" }}"
           Provider:
-            Url: "https://auth.{{ env "SERVERNAME" }}/"
+            Url: "https://auth.{{ env "SERVERNAME" }}"
             ClientId: "{{ env "OIDC_CLIENT_ID" }}"
             ClientSecret: "{{ env "OIDC_CLIENT_SECRET" }}"
           Scopes:
