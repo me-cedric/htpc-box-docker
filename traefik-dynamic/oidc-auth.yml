@@ -1,0 +1,46 @@
+http:
+  middlewares:
+    # Admin-only access — requires membership in "admin" group
+    oidc-auth-admin:
+      plugin:
+        traefik-oidc-auth:
+          Secret: "{{ env "OIDC_SECRET" }}"
+          Provider:
+            Url: "https://auth.{{ env "SERVERNAME" }}/"
+            ClientId: "{{ env "OIDC_CLIENT_ID" }}"
+            ClientSecret: "{{ env "OIDC_CLIENT_SECRET" }}"
+          Scopes:
+            - openid
+            - profile
+            - email
+            - groups
+          LogoutUri: "/logout"
+          PostLogoutRedirectUri: "https://homarr.{{ env "SERVERNAME" }}"
+          Authorization:
+            AssertClaims:
+              - Name: "groups"
+                AnyOf:
+                  - "admin"
+
+    # User access — requires membership in "admin" or "users" group
+    oidc-auth-user:
+      plugin:
+        traefik-oidc-auth:
+          Secret: "{{ env "OIDC_SECRET" }}"
+          Provider:
+            Url: "https://auth.{{ env "SERVERNAME" }}/"
+            ClientId: "{{ env "OIDC_CLIENT_ID" }}"
+            ClientSecret: "{{ env "OIDC_CLIENT_SECRET" }}"
+          Scopes:
+            - openid
+            - profile
+            - email
+            - groups
+          LogoutUri: "/logout"
+          PostLogoutRedirectUri: "https://homarr.{{ env "SERVERNAME" }}"
+          Authorization:
+            AssertClaims:
+              - Name: "groups"
+                AnyOf:
+                  - "admin"
+                  - "users"
