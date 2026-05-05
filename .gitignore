@@ -6,3 +6,5 @@ letsencrypt/*
 portainer-data/*
 transcode_cache/*
 logs/*
+.dual-graph/
+.dual-graph-context/
