@@ -19,13 +19,6 @@ x-common-keys-media: &common-keys-media
   security_opt:
     - "no-new-privileges=true"
 
-x-swaparr-env: &swaparr-env
-  TIME_THRESHOLD: 2h
-  SIZE_THRESHOLD: 25GB
-  CHECK_INTERVAL: 10m
-  STRIKE_THRESHOLD: 3
-  AGGRESSIVE_STRIKES: "true"
-
 x-common-env: &common-env
   PUID: ${PUID}
   PGID: ${PGID}
@@ -396,35 +389,53 @@ services:
       - traefik
 
   ############################
-  # Swaparr - Stalled download manager
+  # Decluttarr - cleanup/declutter for Radarr & Sonarr
   ############################
-  swaparr-radarr:
-    image: ghcr.io/thijmengthn/swaparr:latest
-    container_name: swaparr-radarr
-    mem_limit: 128m
+  decluttarr:
+    image: ghcr.io/manimatter/decluttarr:latest
+    container_name: decluttarr
+    mem_limit: 256m
+    <<: *common-keys-media
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.117
     restart: unless-stopped
+    volumes:
+      - ${CONFIG}/decluttarr:/app/config:rw
+      - ${CONFIG}/decluttarr/logs:/app/logs:rw
     environment:
-      <<: *swaparr-env
-      BASEURL: http://192.168.89.104:7878
-      APIKEY: ${RADARR_API_KEY}
-      PLATFORM: radarr
-
-  swaparr-sonarr:
-    image: ghcr.io/thijmengthn/swaparr:latest
-    container_name: swaparr-sonarr
-    mem_limit: 128m
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.118
-    restart: unless-stopped
-    environment:
-      <<: *swaparr-env
-      BASEURL: http://192.168.89.105:8989
-      APIKEY: ${SONARR_API_KEY}
-      PLATFORM: sonarr
+      <<: *common-env
+      LOG_LEVEL: ${DECLUTTARR_LOG_LEVEL:-INFO}
+      TEST_RUN: ${DECLUTTARR_TEST_RUN:-false}
+      TIMER: ${DECLUTTARR_TIMER:-120}
+      SSL_VERIFICATION: ${DECLUTTARR_SSL_VERIFICATION:-true}
+      PRIVATE_TRACKER_HANDLING: ${DECLUTTARR_PRIVATE_TRACKER_HANDLING:-remove}
+      PUBLIC_TRACKER_HANDLING: ${DECLUTTARR_PUBLIC_TRACKER_HANDLING:-remove}
+      OBSOLETE_TAG: ${DECLUTTARR_OBSOLETE_TAG:-Obsolete}
+      PROTECTED_TAG: ${DECLUTTARR_PROTECTED_TAG:-Keep}
+      REMOVE_BAD_FILES: ${DECLUTTARR_REMOVE_BAD_FILES:-true}
+      REMOVE_FAILED_DOWNLOADS: ${DECLUTTARR_REMOVE_FAILED_DOWNLOADS:-true}
+      REMOVE_FAILED_IMPORTS: ${DECLUTTARR_REMOVE_FAILED_IMPORTS:-true}
+      REMOVE_METADATA_MISSING: ${DECLUTTARR_REMOVE_METADATA_MISSING:-true}
+      REMOVE_MISSING_FILES: ${DECLUTTARR_REMOVE_MISSING_FILES:-true}
+      REMOVE_ORPHANS: ${DECLUTTARR_REMOVE_ORPHANS:-true}
+      REMOVE_SLOW: ${DECLUTTARR_REMOVE_SLOW:-true}
+      REMOVE_STALLED: ${DECLUTTARR_REMOVE_STALLED:-true}
+      REMOVE_UNMONITORED: ${DECLUTTARR_REMOVE_UNMONITORED:-true}
+      SEARCH_UNMET_CUTOFF: ${DECLUTTARR_SEARCH_UNMET_CUTOFF:-true}
+      SEARCH_MISSING: ${DECLUTTARR_SEARCH_MISSING:-true}
+      DETECT_DELETIONS: ${DECLUTTARR_DETECT_DELETIONS:-true}
+      SONARR: >
+        - base_url: "${DECLUTTARR_SONARR_BASE_URL:-http://192.168.89.105:8989}"
+          api_key: "${SONARR_API_KEY}"
+      RADARR: >
+        - base_url: "${DECLUTTARR_RADARR_BASE_URL:-http://192.168.89.104:7878}"
+          api_key: "${RADARR_API_KEY}"
+      QBITTORRENT: >
+        - base_url: "${DECLUTTARR_QBITTORRENT_BASE_URL:-http://192.168.89.160:8123}"
+          name: "qBittorrent"
+    depends_on:
+      - traefik
 
   ############################
   # Gluetun VPN (NordVPN via OpenVPN)
