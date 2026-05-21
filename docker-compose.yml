@@ -435,7 +435,16 @@ services:
         - base_url: "${DECLUTTARR_QBITTORRENT_BASE_URL:-http://192.168.89.160:8123}"
           name: "qBittorrent"
     depends_on:
-      - traefik
+      traefik:
+        condition: service_started
+      radarr:
+        condition: service_healthy
+      sonarr:
+        condition: service_healthy
+      gluetun:
+        condition: service_healthy
+      qbittorrent:
+        condition: service_started
 
   ############################
   # Gluetun VPN (NordVPN via OpenVPN)
