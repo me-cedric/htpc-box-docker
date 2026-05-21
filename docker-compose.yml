@@ -403,6 +403,9 @@ services:
     volumes:
       - ${CONFIG}/decluttarr:/app/config:rw
       - ${CONFIG}/decluttarr/logs:/app/logs:rw
+      - ${ROOT}/tv:/tv:rw
+      - ${ROOT}/movies:/movies:rw
+      - ${ROOT}/downloads:/downloads:rw
     environment:
       <<: *common-env
       LOG_LEVEL: ${DECLUTTARR_LOG_LEVEL:-INFO}
