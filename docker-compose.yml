@@ -434,6 +434,8 @@ services:
       QBITTORRENT: >
         - base_url: "${DECLUTTARR_QBITTORRENT_BASE_URL:-http://192.168.89.160:8123}"
           name: "qBittorrent"
+          username: "${DECLUTTARR_QBITTORRENT_USERNAME:-}"
+          password: "${DECLUTTARR_QBITTORRENT_PASSWORD:-}"
     depends_on:
       traefik:
         condition: service_started
