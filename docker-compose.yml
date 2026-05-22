@@ -11,9 +11,16 @@ networks:
       config:
         - subnet: 192.168.89.0/24
 
+x-public-dns: &public-dns
+  - 8.8.8.8
+  - 8.8.4.4
+  - 1.1.1.1
+  - 1.0.0.1
+
 x-common-keys-media: &common-keys-media
   networks:
     - npm_proxy
+  dns: *public-dns
   restart: unless-stopped
   # prevents any process within the container to gain more privileges
   security_opt:
@@ -134,6 +141,7 @@ services:
     container_name: watchtower
     mem_limit: 256m
     image: nickfedor/watchtower:latest
+    dns: *public-dns
     restart: unless-stopped
     security_opt:
       - "no-new-privileges=true"
@@ -462,6 +470,7 @@ services:
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.160
+    dns: *public-dns
     cap_add:
       - NET_ADMIN
     devices:
@@ -506,6 +515,7 @@ services:
     mem_limit: 1g
     restart: unless-stopped
     network_mode: service:gluetun
+    dns: *public-dns
     security_opt:
       - "no-new-privileges=true"
     environment:
@@ -619,6 +629,7 @@ services:
     image: mcuadros/ofelia:latest
     container_name: scheduler
     mem_limit: 128m
+    dns: *public-dns
     security_opt:
       - "no-new-privileges=true"
     depends_on:
@@ -648,6 +659,7 @@ services:
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.108
+    dns: *public-dns
     restart: on-failure:2
     volumes:
       - ${CONFIG}/plextraktsync:/app/config
@@ -831,6 +843,7 @@ services:
     image: nextcloud:latest
     container_name: nextcloud
     mem_limit: 1g
+    dns: *public-dns
     restart: unless-stopped
     security_opt:
       - "no-new-privileges=true"
@@ -961,6 +974,7 @@ services:
     # (Google Home/Cast, Yeelight LAN protocol, JBL Chromecast)
     # NOTE: cannot use <<: *common-keys-media (incompatible with network_mode: host)
     network_mode: host
+    dns: *public-dns
     restart: unless-stopped
     security_opt:
       - "no-new-privileges:true"
