@@ -515,7 +515,6 @@ services:
     mem_limit: 1g
     restart: unless-stopped
     network_mode: service:gluetun
-    dns: *public-dns
     security_opt:
       - "no-new-privileges=true"
     environment:
