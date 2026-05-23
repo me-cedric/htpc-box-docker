@@ -477,9 +477,8 @@ services:
       - /dev/net/tun:/dev/net/tun
     environment:
       - VPN_SERVICE_PROVIDER=nordvpn
-      - VPN_TYPE=openvpn
-      - OPENVPN_USER=${VPN_USER}
-      - OPENVPN_PASSWORD=${VPN_PWD}
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${VPN_KEY}
       - SERVER_COUNTRIES=${VPN_COUNTRY}
       - FIREWALL_OUTBOUND_SUBNETS=${NETWORK}
       - TZ=${TZ}
