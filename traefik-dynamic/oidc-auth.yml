@@ -1,5 +1,17 @@
 http:
   middlewares:
+    # Global security headers applied to all services
+    security-headers:
+      headers:
+        stsSeconds: 63072000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        customFrameOptionsValue: SAMEORIGIN
+        referrerPolicy: same-origin
+
     # Admin-only access — requires membership in "credentials-admin" group
     oidc-auth-admin:
       plugin:
