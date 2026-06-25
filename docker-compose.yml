@@ -155,7 +155,7 @@ services:
     mem_limit: 512m
     image: ghcr.io/homarr-labs/homarr:latest
     ports:
-      - '7575:7575'
+      - '7575:3000'
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.113
@@ -175,9 +175,9 @@ services:
       - "traefik.http.routers.homarr.tls=true"
       - "traefik.http.routers.homarr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.homarr.service=homarr"
-      - "traefik.http.services.homarr.loadbalancer.server.port=7575"
+      - "traefik.http.services.homarr.loadbalancer.server.port=3000"
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:7575/api/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/api/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
