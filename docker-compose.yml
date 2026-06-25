@@ -552,37 +552,37 @@ services:
   ############################
   # Autobrr (ratio building)
   ############################
-  autobrr:
-    image: ghcr.io/autobrr/autobrr:latest
-    container_name: autobrr
-    mem_limit: 256m
-    <<: *common-keys-media
-    networks:
-      npm_proxy:
-        ipv4_address: 192.168.89.161
-    environment:
-      <<: *common-env
-    volumes:
-      - ${CONFIG}/autobrr:/config
-    ports:
-      - "7474"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.autobrr.rule=Host(`autobrr.${SERVERNAME}`)"
-      - "traefik.http.routers.autobrr.middlewares=security-headers@file,oidc-auth-admin@file"
-      - "traefik.http.routers.autobrr.entrypoints=websecure"
-      - "traefik.http.routers.autobrr.tls=true"
-      - "traefik.http.routers.autobrr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.autobrr.service=autobrr"
-      - "traefik.http.services.autobrr.loadbalancer.server.port=7474"
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:7474/api/healthz" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    depends_on:
-      - traefik
+  # autobrr:
+  #   image: ghcr.io/autobrr/autobrr:latest
+  #   container_name: autobrr
+  #   mem_limit: 256m
+  #   <<: *common-keys-media
+  #   networks:
+  #     npm_proxy:
+  #       ipv4_address: 192.168.89.161
+  #   environment:
+  #     <<: *common-env
+  #   volumes:
+  #     - ${CONFIG}/autobrr:/config
+  #   ports:
+  #     - "7474"
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.autobrr.rule=Host(`autobrr.${SERVERNAME}`)"
+  #     - "traefik.http.routers.autobrr.middlewares=security-headers@file,oidc-auth-admin@file"
+  #     - "traefik.http.routers.autobrr.entrypoints=websecure"
+  #     - "traefik.http.routers.autobrr.tls=true"
+  #     - "traefik.http.routers.autobrr.tls.certresolver=letsencrypt"
+  #     - "traefik.http.routers.autobrr.service=autobrr"
+  #     - "traefik.http.services.autobrr.loadbalancer.server.port=7474"
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:7474/api/healthz" ]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
+  #   depends_on:
+  #     - traefik
 
   ############################
   # Plex (open access)
