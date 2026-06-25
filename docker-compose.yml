@@ -22,32 +22,10 @@ x-common-keys-media: &common-keys-media
     - npm_proxy
   dns: *public-dns
   restart: unless-stopped
-  # prevents any process within the container to gain more privileges
-  cap_drop:
-    - ALL
-  cap_add:
-    - CHOWN
-    - DAC_OVERRIDE
-    - FOWNER
-    - SETUID
-    - SETGID
-    - KILL
   security_opt:
     - "no-new-privileges=true"
   ulimits:
     core: 0
-  pids_limit: 200
-  tmpfs:
-    - /tmp
-    # s6-overlay v3 (LinuxServer.io images) writes its supervisor log to
-    # /var/log; without this writable space, radarr/sonarr/prowlarr/bazarr
-    # fail to start within ~5s on a read-only rootfs.
-    # 128m leaves headroom for theme-park init dumps on first boot.
-    # NOTE: do not add /var/run — it is a symlink to /run on Debian/Alpine
-    # base images, and a separate tmpfs there would shadow the symlink and
-    # break pid lookups.
-    - /var/log:size=128m
-    - /var/tmp:size=32m
   logging:
     driver: "json-file"
     options:
@@ -72,25 +50,6 @@ services:
     mem_limit: 256m
     image: traefik:latest
     <<: *common-keys-media
-    # Read-only rootfs inherited from the anchor; extend tmpfs to add only
-    # /plugins-storage (writable) so the experimental traefik-oidc-auth
-    # plugin can download/cache its WASM at runtime.
-    # YAML merge keys REPLACE the anchor's tmpfs list, so re-list /tmp + /run
-    # from the anchor here. (/var/log is intentionally dropped — Traefik is
-    # not a s6-overlay-based image and writes nothing to rootfs /var/log.)
-    tmpfs:
-      - /tmp
-      - /run
-      - /plugins-storage:size=64m
-    # Traefik's official image runs as UID 65532. The bind-mounted
-    # /etc/traefik/dynamic directory may not be readable by that user
-    # depending on host perms/ACLs; running as root + DAC_OVERRIDE lets us
-    # bypass that constraint without requiring chmod on the host.
-    # cap_drop:ALL + no-new-privileges still apply, so this is contained.
-    user: "0:0"
-    # YAML merge keys REPLACE arrays (not merge), so the cap_add from
-    # common-keys-media is lost here — we must re-list every cap Traefik
-    # actually needs. Keep these in sync with the anchor when editing it.
     cap_add:
       - NET_BIND_SERVICE  # bind 80/443
       - DAC_OVERRIDE      # read /etc/traefik/dynamic regardless of host perms
@@ -531,10 +490,8 @@ services:
       npm_proxy:
         ipv4_address: 192.168.89.160
     dns: *public-dns
-    cap_drop:
-      - ALL
     cap_add:
-      - NET_ADMIN
+    - NET_ADMIN
     devices:
       - /dev/net/tun:/dev/net/tun
     environment:
