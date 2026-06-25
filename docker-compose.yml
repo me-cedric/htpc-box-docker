@@ -36,11 +36,9 @@ x-common-keys-media: &common-keys-media
     - "no-new-privileges=true"
   ulimits:
     core: 0
-  read_only: true
   pids_limit: 200
   tmpfs:
     - /tmp
-    - /run
     # s6-overlay v3 (LinuxServer.io images) writes its supervisor log to
     # /var/log; without this writable space, radarr/sonarr/prowlarr/bazarr
     # fail to start within ~5s on a read-only rootfs.
@@ -49,6 +47,7 @@ x-common-keys-media: &common-keys-media
     # base images, and a separate tmpfs there would shadow the symlink and
     # break pid lookups.
     - /var/log:size=128m
+    - /var/tmp:size=32m
   logging:
     driver: "json-file"
     options:
