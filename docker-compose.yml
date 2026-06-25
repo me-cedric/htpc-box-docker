@@ -155,13 +155,13 @@ services:
     mem_limit: 512m
     image: ghcr.io/homarr-labs/homarr:latest
     ports:
-      - "7575"
+      - '7575:7575'
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.113
     <<: *common-keys-media
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - ${CONFIG}/homarr/appdata:/appdata
     environment:
       <<: *common-env
