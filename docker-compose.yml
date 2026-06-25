@@ -22,7 +22,6 @@ x-common-keys-media: &common-keys-media
     - npm_proxy
   dns: *public-dns
   restart: unless-stopped
-  init: true
   # prevents any process within the container to gain more privileges
   cap_drop:
     - ALL
