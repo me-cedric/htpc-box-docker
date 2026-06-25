@@ -170,14 +170,14 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.homarr.rule=Host(`homarr.${SERVERNAME}`)"
-      - "traefik.http.routers.homarr.middlewares=security-headers@file,oidc-auth-user@file"
+      - "traefik.http.routers.homarr.middlewares=security-headers@file"
       - "traefik.http.routers.homarr.entrypoints=websecure"
       - "traefik.http.routers.homarr.tls=true"
       - "traefik.http.routers.homarr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.homarr.service=homarr"
       - "traefik.http.services.homarr.loadbalancer.server.port=3000"
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:3000/api/health" ]
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:3000" ]
       interval: 30s
       timeout: 10s
       retries: 3
