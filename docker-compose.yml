@@ -50,10 +50,6 @@ services:
     mem_limit: 256m
     image: traefik:latest
     <<: *common-keys-media
-    cap_add:
-      - NET_BIND_SERVICE  # bind 80/443
-      - DAC_OVERRIDE      # read /etc/traefik/dynamic regardless of host perms
-      - CHOWN             # letsencrypt writes may chown the acme.json
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.100
@@ -82,6 +78,7 @@ services:
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
+      - --serverstransport.insecureskipverify=true
       - "--certificatesresolvers.letsencrypt.acme.email=${EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
@@ -96,7 +93,7 @@ services:
       - "traefik.http.routers.traefik.tls=true"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik.entrypoints=websecure"
-      - "traefik.http.routers.traefik.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.traefik.middlewares=oidc-auth-admin@file"
       # Redirect HTTP → HTTPS
       - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
@@ -207,7 +204,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.portainer.rule=Host(`portainer.${SERVERNAME}`)"
-      - "traefik.http.routers.portainer.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.portainer.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.portainer.entrypoints=websecure"
       - "traefik.http.routers.portainer.tls=true"
       - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
@@ -244,7 +241,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.prowlarr.rule=Host(`prowlarr.${SERVERNAME}`)"
-      - "traefik.http.routers.prowlarr.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.prowlarr.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.prowlarr.entrypoints=websecure"
       - "traefik.http.routers.prowlarr.tls=true"
       - "traefik.http.routers.prowlarr.tls.certresolver=letsencrypt"
@@ -286,7 +283,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.radarr.rule=Host(`radarr.${SERVERNAME}`)"
-      - "traefik.http.routers.radarr.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.radarr.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.radarr.entrypoints=websecure"
       - "traefik.http.routers.radarr.tls=true"
       - "traefik.http.routers.radarr.tls.certresolver=letsencrypt"
@@ -325,7 +322,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.sonarr.rule=Host(`sonarr.${SERVERNAME}`)"
-      - "traefik.http.routers.sonarr.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.sonarr.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.sonarr.entrypoints=websecure"
       - "traefik.http.routers.sonarr.tls=true"
       - "traefik.http.routers.sonarr.tls.certresolver=letsencrypt"
@@ -364,7 +361,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.bazarr.rule=Host(`bazarr.${SERVERNAME}`)"
-      - "traefik.http.routers.bazarr.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.bazarr.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.bazarr.entrypoints=websecure"
       - "traefik.http.routers.bazarr.tls=true"
       - "traefik.http.routers.bazarr.tls.certresolver=letsencrypt"
@@ -400,7 +397,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.flaresolverr.rule=Host(`flaresolverr.${SERVERNAME\
         }`)"
-      - "traefik.http.routers.flaresolverr.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.flaresolverr.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.flaresolverr.entrypoints=websecure"
       - "traefik.http.routers.flaresolverr.tls=true"
       - "traefik.http.routers.flaresolverr.tls.certresolver=letsencrypt"
@@ -514,7 +511,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.qbittorrent.rule=Host(`qbittorrent.${SERVERNAME}`)"
-      - "traefik.http.routers.qbittorrent.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.qbittorrent.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.qbittorrent.entrypoints=websecure"
       - "traefik.http.routers.qbittorrent.tls=true"
       - "traefik.http.routers.qbittorrent.tls.certresolver=letsencrypt"
@@ -569,7 +566,7 @@ services:
   #   labels:
   #     - "traefik.enable=true"
   #     - "traefik.http.routers.autobrr.rule=Host(`autobrr.${SERVERNAME}`)"
-  #     - "traefik.http.routers.autobrr.middlewares=security-headers@file,oidc-auth-admin@file"
+  #     - "traefik.http.routers.autobrr.middlewares=oidc-auth-admin@file"
   #     - "traefik.http.routers.autobrr.entrypoints=websecure"
   #     - "traefik.http.routers.autobrr.tls=true"
   #     - "traefik.http.routers.autobrr.tls.certresolver=letsencrypt"
@@ -736,7 +733,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.tdarr.rule=Host(`tdarr.${SERVERNAME}`)"
-      - "traefik.http.routers.tdarr.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.tdarr.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.tdarr.entrypoints=websecure"
       - "traefik.http.routers.tdarr.tls=true"
       - "traefik.http.routers.tdarr.tls.certresolver=letsencrypt"
@@ -775,7 +772,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.kavita.rule=Host(`kavita.${SERVERNAME}`)"
-      - "traefik.http.routers.kavita.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.kavita.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.kavita.entrypoints=websecure"
       - "traefik.http.routers.kavita.tls=true"
       - "traefik.http.routers.kavita.tls.certresolver=letsencrypt"
@@ -806,13 +803,13 @@ services:
       npm_proxy:
         ipv4_address: 192.168.89.112
     ports:
-      - "5055"
+      - "5055:5055"
     volumes:
       - ${CONFIG}/seerr:/app/config
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.seerr.rule=Host(`seerr.${SERVERNAME}`)"
-      - "traefik.http.routers.seerr.middlewares=security-headers@file,oidc-auth-user@file"
+      - "traefik.http.routers.seerr.middlewares=oidc-auth-user@file"
       - "traefik.http.routers.seerr.entrypoints=websecure"
       - "traefik.http.routers.seerr.tls=true"
       - "traefik.http.routers.seerr.tls.certresolver=letsencrypt"
@@ -910,8 +907,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nextcloud.rule=Host(`nextcloud.${SERVERNAME}`)"
-      - "traefik.http.routers.nextcloud.middlewares=security-headers@file,oidc\
-        -auth-admin@file,nextcloud-dav,nextcloud-headers"
+      - "traefik.http.routers.nextcloud.middlewares=nextcloud-dav,nextcloud-headers"
       - "traefik.http.routers.nextcloud.entrypoints=websecure"
       - "traefik.http.routers.nextcloud.tls=true"
       - "traefik.http.routers.nextcloud.tls.certresolver=letsencrypt"
@@ -946,7 +942,7 @@ services:
       npm_proxy:
         ipv4_address: 192.168.89.168
     ports:
-      - "8200"
+      - "8200:80"
     environment:
       <<: *common-env
       DOCKER_MODS: ghcr.io/themepark-dev/theme.park:duplicati
@@ -958,7 +954,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.duplicati.rule=Host(`duplicati.${SERVERNAME}`)"
-      - "traefik.http.routers.duplicati.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.duplicati.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.duplicati.entrypoints=websecure"
       - "traefik.http.routers.duplicati.tls=true"
       - "traefik.http.routers.duplicati.tls.certresolver=letsencrypt"
@@ -992,7 +988,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nginx.rule=Host(`truenas.${SERVERNAME}`)"
-      - "traefik.http.routers.nginx.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.nginx.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.nginx.entrypoints=websecure"
       - "traefik.http.routers.nginx.tls=true"
       - "traefik.http.routers.nginx.tls.certresolver=letsencrypt"
@@ -1037,7 +1033,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.homeassistant.rule=Host(`ha.${SERVERNAME}`)"
-      - "traefik.http.routers.homeassistant.middlewares=security-headers@file,oidc-auth-admin@file"
+      - "traefik.http.routers.homeassistant.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.homeassistant.entrypoints=websecure"
       - "traefik.http.routers.homeassistant.tls=true"
       - "traefik.http.routers.homeassistant.tls.certresolver=letsencrypt"
@@ -1089,7 +1085,7 @@ services:
   #     - com.centurylinklabs.watchtower.enable=true
   #     - "traefik.enable=true"
   #     - "traefik.http.routers.htpc-dashboard.rule=Host(`dashboard.${SERVERNAME}`)"
-  #     - "traefik.http.routers.htpc-dashboard.middlewares=security-headers@file,oidc-auth-user@file"
+  #     - "traefik.http.routers.htpc-dashboard.middlewares=oidc-auth-user@file"
   #     - "traefik.http.routers.htpc-dashboard.entrypoints=websecure"
   #     - "traefik.http.routers.htpc-dashboard.tls=true"
   #     - "traefik.http.routers.htpc-dashboard.tls.certresolver=letsencrypt"
