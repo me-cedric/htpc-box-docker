@@ -155,7 +155,7 @@ services:
     mem_limit: 512m
     image: ghcr.io/homarr-labs/homarr:latest
     ports:
-      - '7575:3000'
+      - "7575"
     networks:
       npm_proxy:
         ipv4_address: 192.168.89.113
@@ -170,14 +170,14 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.homarr.rule=Host(`homarr.${SERVERNAME}`)"
-      - "traefik.http.routers.homarr.middlewares=security-headers@file"
+      - "traefik.http.routers.homarr.middlewares=oidc-auth-user@file"
       - "traefik.http.routers.homarr.entrypoints=websecure"
       - "traefik.http.routers.homarr.tls=true"
       - "traefik.http.routers.homarr.tls.certresolver=letsencrypt"
       - "traefik.http.routers.homarr.service=homarr"
-      - "traefik.http.services.homarr.loadbalancer.server.port=3000"
+      - "traefik.http.services.homarr.loadbalancer.server.port=7575"
     healthcheck:
-      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:3000" ]
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:7575" ]
       interval: 30s
       timeout: 10s
       retries: 3
