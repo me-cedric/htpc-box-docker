@@ -1,4 +1,5 @@
 .env
+/config.js
 nginx.conf
 tfa-config.yaml
 certs/*

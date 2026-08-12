@@ -547,6 +547,47 @@ services:
         condition: service_started
 
   ############################
+  # cross-seed (admin group)
+  ############################
+  cross-seed:
+    image: ghcr.io/cross-seed/cross-seed:6
+    container_name: cross-seed
+    mem_limit: 512m
+    user: "${PUID}:${PGID}"
+    command: daemon
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.162
+    expose:
+      - "2468"
+    environment:
+      <<: *common-env
+    volumes:
+      - ${CONFIG}/cross-seed:/config
+      # Copy config.example.js to config.js before you start this service.
+      - type: bind
+        source: ./config.js
+        target: /config/config.js
+        read_only: true
+        bind:
+          create_host_path: false
+      - ${ROOT}/downloads:/downloads
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.enable=true"
+      - "traefik.docker.network=npm_proxy"
+      - "traefik.http.routers.crossseed.rule=Host(`crossseed.${SERVERNAME}`)"
+      - "traefik.http.routers.crossseed.middlewares=oidc-auth-admin@file"
+      - "traefik.http.routers.crossseed.entrypoints=websecure"
+      - "traefik.http.routers.crossseed.tls=true"
+      - "traefik.http.routers.crossseed.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.crossseed.service=crossseed"
+      - "traefik.http.services.crossseed.loadbalancer.server.port=2468"
+    depends_on:
+      - traefik
+
+  ############################
   # Autobrr (ratio building)
   ############################
   # autobrr:

@@ -36,6 +36,7 @@
 #### Download & VPN
 - [🔒 NordVPN](#-nordvpn)
 - [📥 qBittorrent](#-qbittorrent-download-client)
+- [🔁 cross-seed](#-cross-seed-cross-seeding)
 - [🔧 FlareSolverr](#-flaresolverr)
 
 #### Media Streaming
@@ -86,6 +87,7 @@ This stack provides a **complete automated media server** with:
 - 🌐 **Reverse Proxy**: Traefik with automatic HTTPS (Let's Encrypt)
 - 🎥 **Media Automation**: Radarr, Sonarr, Prowlarr for automated downloads
 - 📥 **Secure Downloads**: qBittorrent behind NordVPN
+- 🔁 **Cross-seeding**: cross-seed finds matching releases and injects them into qBittorrent
 - 🎬 **Streaming**: Plex with hardware transcoding
 - 📝 **Subtitles**: Bazarr for 40+ languages
 - 📚 **Books & Comics**: Kavita reader
@@ -103,6 +105,8 @@ Quality Check (Radarr/Sonarr)
 Search Indexers (Prowlarr)
     ↓
 Download via VPN (qBittorrent + NordVPN)
+    ↓
+Find matching releases (cross-seed)
     ↓
 Organize & Rename (Radarr/Sonarr)
     ↓
@@ -606,6 +610,7 @@ graph TD
         subgraph "Download Client"
             NordVPN[🔒 NordVPN]
             qBittorrent[📥 qBittorrent]
+            CrossSeed[🔁 cross-seed]
             FlareSolverr[🔧 FlareSolverr]
         end
 
@@ -634,6 +639,8 @@ graph TD
     
     Radarr --> qBittorrent
     Sonarr --> qBittorrent
+    CrossSeed --> Prowlarr
+    CrossSeed --> qBittorrent
     
     qBittorrent -.-> NordVPN
     Prowlarr -.-> FlareSolverr
@@ -660,6 +667,7 @@ graph TD
 | 📝 Bazarr | Subtitles | - | `bazarr.${SERVERNAME}` |
 | 🔒 NordVPN | VPN Tunnel | - | (internal) |
 | 📥 qBittorrent | Download Client | - | `qbittorrent.${SERVERNAME}` |
+| 🔁 cross-seed | Cross-seed Automation | 2468 | `crossseed.${SERVERNAME}` |
 | 🎬 Plex | Media Server | 32400 | `http://server-ip:32400/web` |
 | 🎞️ Tdarr | Transcoding | - | `tdarr.${SERVERNAME}` |
 | 📖 Kavita | Ebook/Comic Reader | - | `kavita.${SERVERNAME}` |
@@ -1170,6 +1178,51 @@ Add a Linux ISO torrent to verify:
 - Download starts
 - VPN is working (check IP)
 - Moves to complete folder
+
+---
+
+## 🔁 cross-seed (Cross-seeding)
+
+- **Container**: `cross-seed`
+- **API**: `https://crossseed.${SERVERNAME}`
+- **Active configuration**: `./config.js`
+
+### 📖 About
+
+cross-seed searches configured indexers for releases that match existing
+qBittorrent data. It injects valid matches and reuses the existing media data.
+
+### 🔧 Setup Steps
+
+1. Copy the tracked example:
+   ```bash
+   cp config.example.js config.js
+   ```
+2. Replace every placeholder in `config.js`.
+3. Add one Prowlarr Torznab URL for each indexer that cross-seed can search.
+4. URL-encode the qBittorrent username and password in `torrentClients`.
+5. Create `${CONFIG}/cross-seed` and `${ROOT}/downloads/cross-seed-links` on the host.
+6. Give both directories to the user and group from `PUID` and `PGID`.
+7. Start the service:
+   ```bash
+   docker compose up -d cross-seed
+   docker compose logs -f cross-seed
+   ```
+
+The Compose file mounts `config.js` at `/config/config.js` as a read-only file.
+It stores the database and logs in `${CONFIG}/cross-seed`. It mounts downloads
+at `/downloads`, which is the same container path that qBittorrent uses.
+
+Get the generated API key after startup:
+
+```bash
+docker compose exec cross-seed cross-seed api-key
+```
+
+Do not add API keys or passwords to `config.example.js`. Git ignores the active
+`config.js` file. See the
+[cross-seed getting-started guide](https://www.cross-seed.org/docs/basics/getting-started)
+for option details.
 
 ---
 
@@ -2315,6 +2368,7 @@ This stack is built using excellent Docker images from:
 - **[Homarr](https://homarr.dev/)**: Dashboard
 - **[Nextcloud](https://nextcloud.com/)**: File sync
 - **[Tdarr](https://tdarr.io/)**: Media transcoding
+- **[cross-seed](https://www.cross-seed.org/)**: Cross-seed automation
 - **Community**: Countless contributors and maintainers
 
 ### 🌟 Special Thanks
