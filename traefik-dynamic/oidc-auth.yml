@@ -12,6 +12,28 @@ http:
         customFrameOptionsValue: SAMEORIGIN
         referrerPolicy: same-origin
 
+    # Proves to better-htpc-dashboard that a request actually came through
+    # Traefik.
+    #
+    # The dashboard derives identity entirely from X-Forwarded-Groups/-User/
+    # -Email. Every container on npm_proxy can reach its port 3000 directly and
+    # Docker bridges are bidirectional, so without this any peer — or anything
+    # with code execution in one — could send `X-Forwarded-Groups:
+    # credentials-admin` and obtain full admin: stack up/down, container
+    # control, credential-vault reads, log reads.
+    #
+    # This MUST be Traefik's own headers middleware rather than the OIDC
+    # plugin's `Headers:` block: `customRequestHeaders` OVERWRITES a
+    # client-supplied value, so it also strips a spoofed secret arriving from
+    # outside. The plugin's block does not give that guarantee.
+    #
+    # PROXY_SHARED_SECRET must match the value set on the dashboard container.
+    # Generate one with `openssl rand -hex 32`.
+    dashboard-proxy-secret:
+      headers:
+        customRequestHeaders:
+          X-Dashboard-Proxy-Secret: "{{ env "PROXY_SHARED_SECRET" }}"
+
     # Admin-only access — requires membership in "credentials-admin" group
     oidc-auth-admin:
       plugin:

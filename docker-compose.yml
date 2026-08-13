@@ -1083,72 +1083,125 @@ services:
 
   ############################
   # HTPC Dashboard (OIDC user group)
-  # Commented out — using dev compose from better-htpc-dashboard repo for testing
+  #
+  # The dashboard does its OWN role gating from the forwarded groups, so it sits
+  # behind oidc-auth-user (not -admin): admins, requesters and viewers all reach
+  # it and each sees the surface their group allows.
+  #
+  # Requires in .env:
+  #   PROXY_SHARED_SECRET  openssl rand -hex 32 — see the dashboard-proxy-secret
+  #                        middleware in traefik-dynamic/oidc-auth.yml
+  #   TMDB_API_KEY         optional; the only integration secret read from env.
+  #                        Everything else lives in the app's encrypted vault and
+  #                        is entered under Settings -> Integrations.
+  #
+  # The host config directory MUST be owned by uid 1000 before first start —
+  # the image runs as uid 1000 and a bind mount masks the image's ownership:
+  #   mkdir -p ${CONFIG}/htpc-dashboard && chown -R 1000:1000 ${CONFIG}/htpc-dashboard
+  # The container refuses to start otherwise, and says so in its logs.
   ############################
-  # htpc-dashboard:
-  #   container_name: htpc-dashboard
-  #   mem_limit: 512m
-  #   image: ghcr.io/me-cedric/better-htpc-dashboard:latest
-  #   ports:
-  #     - "3000"
-  #   networks:
-  #     npm_proxy:
-  #       ipv4_address: 192.168.89.175
-  #   <<: *common-keys-media
-  #   volumes:
-  #     - ${CONFIG}/htpc-dashboard:/config
-  #   environment:
-  #     <<: *common-env
-  #     APP_BASE_URL: "https://dashboard.${SERVERNAME}"
-  #     CONFIG_DIR: /config
-  #     DATABASE_URL: "file:/config/dashboard.sqlite"
-  #     POCKETID_ISSUER_URL: "https://auth.${SERVERNAME}"
-  #     POCKETID_CLIENT_ID: ${OIDC_CLIENT_ID}
-  #     POCKETID_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
-  #     POCKETID_ADMIN_ROLE: credentials-admin
-  #     POCKETID_REQUESTER_ROLE: requester
-  #     POCKETID_VIEWER_ROLE: user
-  #     SONARR_BASE_URL: "http://sonarr:8989"
-  #     RADARR_BASE_URL: "http://radarr:7878"
-  #     PROWLARR_BASE_URL: "http://prowlarr:9696"
-  #     QBITTORRENT_BASE_URL: "http://gluetun:8123"
-  #     PLEX_BASE_URL: "http://plex:32400"
-  #     DUPLICATI_BASE_URL: "http://duplicati:8200"
-  #     DOCKER_MANAGEMENT_ENABLED: "true"
-  #     DOCKER_SOCKET_PROXY_URL: "http://docker-socket-proxy:2375"
-  #   labels:
-  #     - com.centurylinklabs.watchtower.enable=true
-  #     - "traefik.enable=true"
-  #     - "traefik.http.routers.htpc-dashboard.rule=Host(`dashboard.${SERVERNAME}`)"
-  #     - "traefik.http.routers.htpc-dashboard.middlewares=oidc-auth-user@file"
-  #     - "traefik.http.routers.htpc-dashboard.entrypoints=websecure"
-  #     - "traefik.http.routers.htpc-dashboard.tls=true"
-  #     - "traefik.http.routers.htpc-dashboard.tls.certresolver=letsencrypt"
-  #     - "traefik.http.routers.htpc-dashboard.service=htpc-dashboard"
-  #     - "traefik.http.services.htpc-dashboard.loadbalancer.server.port=3000"
-  #   depends_on:
-  #     - traefik
-  #     - docker-socket-proxy
+  htpc-dashboard:
+    container_name: htpc-dashboard
+    mem_limit: 512m
+    image: ghcr.io/me-cedric/better-htpc-dashboard:latest
+    # NO `ports:` — deliberately. Traefik reaches the container over npm_proxy
+    # via the loadbalancer label. Publishing 3000 would expose the app to the
+    # LAN, bypassing the OIDC middleware entirely.
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.175
+    <<: *common-keys-media
+    volumes:
+      - ${CONFIG}/htpc-dashboard:/config
+    environment:
+      <<: *common-env
+      NODE_ENV: production
+      APP_BASE_URL: "https://dashboard.${SERVERNAME}"
+      CONFIG_DIR: /config
+      DATABASE_URL: "file:/config/dashboard.sqlite"
+      # Without this every request is denied, by design: it is what distinguishes
+      # a Traefik-proxied request from a peer container forging X-Forwarded-Groups.
+      PROXY_SHARED_SECRET: ${PROXY_SHARED_SECRET}
+      POCKETID_ISSUER_URL: "https://auth.${SERVERNAME}"
+      POCKETID_CLIENT_ID: ${OIDC_CLIENT_ID}
+      POCKETID_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      # Must match the groups asserted by the oidc-auth-* middlewares.
+      POCKETID_ADMIN_ROLE: credentials-admin
+      POCKETID_REQUESTER_ROLE: requester
+      POCKETID_VIEWER_ROLE: user
+      # Base URLs only. Integration credentials live in the app's encrypted
+      # vault under /config, entered under Settings -> Integrations.
+      SONARR_BASE_URL: "http://sonarr:8989"
+      RADARR_BASE_URL: "http://radarr:7878"
+      PROWLARR_BASE_URL: "http://prowlarr:9696"
+      BAZARR_BASE_URL: "http://bazarr:6767"
+      KAVITA_BASE_URL: "http://kavita:5000"
+      QBITTORRENT_BASE_URL: "http://gluetun:8123"
+      # The container is named plex-server, not plex.
+      PLEX_BASE_URL: "http://plex-server:32400"
+      DUPLICATI_BASE_URL: "http://duplicati:8200"
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      DOCKER_MANAGEMENT_ENABLED: "true"
+      DOCKER_SOCKET_PROXY_URL: "http://docker-socket-proxy:2375"
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Belt and braces: the local-dev auth bypass must never be live here.
+      AUTH_DEV_ROLE: ""
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - "traefik.enable=true"
+      - "traefik.docker.network=npm_proxy"
+      - "traefik.http.routers.htpc-dashboard.rule=Host(`dashboard.${SERVERNAME}`)"
+      # Order matters: authenticate first, then stamp the proxy secret. Both are
+      # required — oidc-auth-user supplies identity, dashboard-proxy-secret is
+      # what makes the app willing to believe it.
+      - "traefik.http.routers.htpc-dashboard.middlewares=oidc-auth-user@file,dashboard-proxy-secret@file"
+      - "traefik.http.routers.htpc-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.htpc-dashboard.tls=true"
+      - "traefik.http.routers.htpc-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.htpc-dashboard.service=htpc-dashboard"
+      - "traefik.http.services.htpc-dashboard.loadbalancer.server.port=3000"
+    # No healthcheck block: the image already defines one (it opens the SQLite
+    # database and checks /config is writable, so "unhealthy" means something a
+    # request would actually hit). Repeating it here would only let the two drift.
+    depends_on:
+      - traefik
+      - docker-socket-proxy
 
   ############################
   # Docker Socket Proxy (for dashboard container management)
+  #
+  # The dashboard never touches /var/run/docker.sock directly. This proxy grants
+  # only the endpoints the container view needs, so a compromise of the dashboard
+  # cannot reach the full Docker API (which is root on the host).
+  #
+  # POST=1 is what allows start/stop/restart from the Stack page. Set it to "0"
+  # to make container management read-only; also set DOCKER_MANAGEMENT_ENABLED
+  # to "false" on htpc-dashboard so the UI stops offering controls that would
+  # then fail.
   ############################
-  # docker-socket-proxy:
-  #   container_name: docker-socket-proxy
-  #   mem_limit: 128m
-  #   image: tecnativa/docker-socket-proxy:latest
-  #   <<: *common-keys-media
-  #   networks:
-  #     npm_proxy:
-  #       ipv4_address: 192.168.89.176
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock:ro
-  #   environment:
-  #     CONTAINERS: "1"
-  #     EVENTS: "1"
-  #     INFO: "1"
-  #     NETWORKS: "1"
-  #     PING: "1"
-  #     POST: "1"
-  #     SERVICES: "0"
-  #     TASKS: "0"
+  docker-socket-proxy:
+    container_name: docker-socket-proxy
+    mem_limit: 128m
+    image: tecnativa/docker-socket-proxy:latest
+    <<: *common-keys-media
+    networks:
+      npm_proxy:
+        ipv4_address: 192.168.89.176
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: "1"
+      EVENTS: "1"
+      # Required for `POST /images/create` — how the dashboard pulls images.
+      # Without it every pull is denied with 403, and the best-effort pull path
+      # reports success anyway, so a nightly "update" restarts containers on the
+      # same images forever.
+      IMAGES: "1"
+      INFO: "1"
+      NETWORKS: "1"
+      PING: "1"
+      POST: "1"
+      SERVICES: "0"
+      TASKS: "0"
+      # Everything not listed above stays denied by the image's own default,
+      # including EXEC, SECRETS, SWARM and VOLUMES.
