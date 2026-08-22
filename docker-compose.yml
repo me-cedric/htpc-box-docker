@@ -809,7 +809,6 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.kavita.rule=Host(`kavita.${SERVERNAME}`)"
-      - "traefik.http.routers.kavita.middlewares=oidc-auth-admin@file"
       - "traefik.http.routers.kavita.entrypoints=websecure"
       - "traefik.http.routers.kavita.tls=true"
       - "traefik.http.routers.kavita.tls.certresolver=letsencrypt"
