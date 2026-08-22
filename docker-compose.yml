@@ -95,7 +95,7 @@ services:
       - "traefik.http.routers.traefik.entrypoints=websecure"
       - "traefik.http.routers.traefik.middlewares=oidc-auth-admin@file"
       # Redirect HTTP → HTTPS
-      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.rule=HostRegexp(`.+`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
@@ -136,7 +136,7 @@ services:
       - "traefik.http.routers.pocketid.service=pocketid"
       - "traefik.http.services.pocketid.loadbalancer.server.port=1411"
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:1411/health" ]
+      test: [ "CMD", "/app/pocket-id", "healthcheck" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -210,12 +210,8 @@ services:
       - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
       - "traefik.http.routers.portainer.service=portainer"
       - "traefik.http.services.portainer.loadbalancer.server.port=9000"
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/api/status" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    # No healthcheck: the portainer-ce image ships no HTTP client (no curl/wget),
+    # so any probe fails and Traefik's docker provider drops the router.
     depends_on:
       - traefik
 
